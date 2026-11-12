@@ -47,6 +47,11 @@
             </intent-filter>
         </activity>
 
+        <activity android:name=".ui.PinSetupActivity" android:exported="false" />
+        <activity android:name=".ui.PinGateActivity" android:exported="false" />
+        <activity android:name=".ui.AppPickerActivity" android:exported="false" />
+        <activity android:name=".ui.ScheduleEditorActivity" android:exported="false" />
+
         <activity
             android:name=".ui.BlockActivity"
             android:excludeFromRecents="true"
