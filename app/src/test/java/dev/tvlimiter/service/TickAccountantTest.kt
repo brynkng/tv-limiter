@@ -48,4 +48,17 @@ class TickAccountantTest {
         val resolvers = listOf("com.google.android.tvlauncher" to 0, "com.android.tv.settings" to -1000)
         assertEquals(setOf("com.google.android.tvlauncher"), ExemptPackages.launchers(resolvers))
     }
+
+    @Test
+    fun `only the default launcher is exempt, not every app with a home screen`() {
+        val resolvers = { listOf("com.google.android.tvlauncher" to 0, "com.example.kioskplayer" to 0) }
+        assertEquals(setOf("com.google.android.tvlauncher"), ExemptPackages.homes("com.google.android.tvlauncher", resolvers))
+    }
+
+    @Test
+    fun `with no default launcher chosen every real launcher stays exempt`() {
+        val resolvers = { listOf("com.google.android.tvlauncher" to 0, "com.android.tv.settings" to -1000) }
+        assertEquals(setOf("com.google.android.tvlauncher"), ExemptPackages.homes("android", resolvers))
+        assertEquals(setOf("com.google.android.tvlauncher"), ExemptPackages.homes(null, resolvers))
+    }
 }

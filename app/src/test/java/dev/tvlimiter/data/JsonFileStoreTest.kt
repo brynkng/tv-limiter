@@ -49,9 +49,11 @@ class JsonFileStoreTest {
     @Test
     fun `a corrupt file gives the defaults and is kept aside`() {
         val file = File(temp.root, "limits.json").apply { writeText("{not json") }
-        val read = limitsStore(file).read()
+        val store = limitsStore(file)
+        val read = store.read()
         assertEquals(LimitsFile(), read)
         assertTrue(File(temp.root, "limits.json.corrupt").exists())
+        assertTrue(store.hasCorruptCopy())
         assertFalse(file.exists())
     }
 }

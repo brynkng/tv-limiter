@@ -6,10 +6,14 @@ import org.junit.Test
 
 class InMemoryPinStore : PinStore {
     var record: PinRecord? = null
+    var damaged = false
+    var saves = 0
     override fun load() = record
     override fun save(record: PinRecord) {
         this.record = record
+        saves++
     }
+    override fun isDamaged() = damaged
 }
 
 class PinGuardTest {
@@ -64,5 +68,29 @@ class PinGuardTest {
     @Test
     fun `no PIN stored reports so`() {
         assertEquals(PinCheck.NoPin, guard().check("1234"))
+    }
+
+    @Test
+    fun `a damaged PIN file is refused rather than treated as no PIN`() {
+        store.damaged = true
+        val guard = guard()
+        assertTrue(guard.isDamaged())
+        assertEquals(PinCheck.Damaged, guard.check("1234"))
+    }
+
+    @Test
+    fun `a right PIN with no failures does not rewrite the file`() {
+        val guard = guard().apply { setPin("1234") }
+        val before = store.saves
+        assertEquals(PinCheck.Ok, guard.check("1234"))
+        assertEquals(before, store.saves)
+    }
+
+    @Test
+    fun `a wrong PIN after an expired lockout starts a fresh count`() {
+        val guard = guard().apply { setPin("1234") }
+        repeat(5) { guard.check("0000") }
+        now += 60_000
+        assertEquals(PinCheck.Wrong(4), guard.check("0000"))
     }
 }
