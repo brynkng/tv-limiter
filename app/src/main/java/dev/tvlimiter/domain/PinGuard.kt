@@ -19,6 +19,9 @@ data class PinRecord(
 interface PinStore {
     fun load(): PinRecord?
     fun save(record: PinRecord)
+
+    /** True when the saved PIN could not be read back, so it must not be treated as never set. */
+    fun isDamaged(): Boolean = false
 }
 
 sealed interface PinCheck {
@@ -26,6 +29,7 @@ sealed interface PinCheck {
     data class Wrong(val triesLeft: Int) : PinCheck
     data class LockedOut(val secondsLeft: Int) : PinCheck
     data object NoPin : PinCheck
+    data object Damaged : PinCheck
 }
 
 /**
@@ -38,6 +42,9 @@ class PinGuard(
     private val elapsedMillis: () -> Long,
 ) {
     fun hasPin(): Boolean = store.load() != null
+
+    /** No PIN can be read, but one was set before; setup must not be offered to whoever holds the remote. */
+    fun isDamaged(): Boolean = store.load() == null && store.isDamaged()
 
     fun setPin(pin: String) = store.save(hasher.create(pin))
 
@@ -56,13 +63,14 @@ class PinGuard(
     }
 
     fun check(pin: String): PinCheck {
-        if (store.load() == null) return PinCheck.NoPin
+        if (store.load() == null) return if (store.isDamaged()) PinCheck.Damaged else PinCheck.NoPin
         val locked = lockoutSecondsLeft()
         if (locked > 0) return PinCheck.LockedOut(locked)
         val record = store.load() ?: return PinCheck.NoPin
         val fresh = if (record.lockStartedAt != null) record.copy(failures = 0, lockStartedAt = null) else record
         if (hasher.verify(pin, fresh)) {
-            store.save(fresh.copy(failures = 0, lockStartedAt = null))
+            // Only write when something changed, so a right PIN doesn't rewrite the file.
+            if (record.failures != 0 || record.lockStartedAt != null) store.save(fresh.copy(failures = 0, lockStartedAt = null))
             return PinCheck.Ok
         }
         val failures = fresh.failures + 1

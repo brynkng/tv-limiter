@@ -25,7 +25,10 @@ class SettingsActivity : GuardedActivity() {
     }
 
     override fun unlockIntent(): Intent =
-        if (PinRepository.guard(this).hasPin()) super.unlockIntent() else Intent(this, PinSetupActivity::class.java)
+        PinRepository.guard(this).let { guard ->
+            // A damaged PIN file goes to the PIN gate, which explains it, never to setup.
+            if (guard.hasPin() || guard.isDamaged()) super.unlockIntent() else Intent(this, PinSetupActivity::class.java)
+        }
 
     override fun onUnlockedResume() = render()
 

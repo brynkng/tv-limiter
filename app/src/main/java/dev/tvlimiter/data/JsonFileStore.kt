@@ -42,6 +42,9 @@ class JsonFileStore<T>(
         }
     }
 
+    /** True when an earlier read found this file corrupt and moved it aside. */
+    fun hasCorruptCopy(): Boolean = File(file.parentFile, "${file.name}.corrupt").exists()
+
     private fun moveAside(): T {
         val aside = File(file.parentFile, "${file.name}.corrupt")
         aside.delete()

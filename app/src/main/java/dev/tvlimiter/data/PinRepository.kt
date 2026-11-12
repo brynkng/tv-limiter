@@ -22,6 +22,8 @@ class PinRepository(private val store: JsonFileStore<PinFile>) : PinStore {
         (cached ?: store.read().also { cached = it }).record
     }
 
+    override fun isDamaged(): Boolean = synchronized(lock) { store.hasCorruptCopy() }
+
     override fun save(record: PinRecord) = synchronized(lock) {
         // Cache first so a failed write still counts a wrong PIN for this run, rather than
         // crashing the PIN prompt.
