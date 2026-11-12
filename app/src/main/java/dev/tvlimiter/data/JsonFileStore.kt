@@ -1,6 +1,7 @@
 package dev.tvlimiter.data
 
 import java.io.File
+import java.io.FileOutputStream
 import java.io.IOException
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerializationException
@@ -30,7 +31,11 @@ class JsonFileStore<T>(
     fun write(value: T) {
         file.parentFile?.mkdirs()
         val temp = File(file.parentFile, "${file.name}.tmp")
-        temp.writeText(json.encodeToString(serializer, value))
+        // Sync before the rename so a power cut can't leave the renamed file empty.
+        FileOutputStream(temp).use { out ->
+            out.write(json.encodeToString(serializer, value).toByteArray())
+            out.fd.sync()
+        }
         if (!temp.renameTo(file)) {
             file.delete()
             if (!temp.renameTo(file)) throw IOException("Could not replace $file")

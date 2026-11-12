@@ -7,6 +7,7 @@ import dev.tvlimiter.domain.PinHasher
 import dev.tvlimiter.domain.PinRecord
 import dev.tvlimiter.domain.PinStore
 import java.io.File
+import java.io.IOException
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -22,9 +23,15 @@ class PinRepository(private val store: JsonFileStore<PinFile>) : PinStore {
     }
 
     override fun save(record: PinRecord) = synchronized(lock) {
+        // Cache first so a failed write still counts a wrong PIN for this run, rather than
+        // crashing the PIN prompt.
         val file = PinFile(record)
-        store.write(file)
         cached = file
+        try {
+            store.write(file)
+        } catch (e: IOException) {
+            // Kept in memory; retried on the next save.
+        }
     }
 
     companion object {

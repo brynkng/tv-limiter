@@ -15,6 +15,7 @@ import android.os.Handler
 import android.os.HandlerThread
 import android.os.IBinder
 import android.os.SystemClock
+import android.util.Log
 import dev.tvlimiter.R
 import dev.tvlimiter.data.LimitsRepository
 import dev.tvlimiter.data.UsageRepository
@@ -33,7 +34,11 @@ class TrackingService : Service() {
 
     private val tick = object : Runnable {
         override fun run() {
-            runCatching { onTick() }
+            try {
+                onTick()
+            } catch (e: Exception) {
+                Log.e(TAG, "Tracking tick failed", e)
+            }
             handler.postDelayed(this, INTERVAL_MILLIS)
         }
     }
@@ -122,6 +127,7 @@ class TrackingService : Service() {
         private const val FIRST_LOOKBACK_MILLIS = 6 * 60 * 60 * 1000L
         private const val OVERLAP_MILLIS = 1_000L
         private const val RELAUNCH_GAP_MILLIS = 5_000L
+        private const val TAG = "TrackingService"
         private const val CHANNEL_ID = "tracking"
         private const val NOTIFICATION_ID = 1
 

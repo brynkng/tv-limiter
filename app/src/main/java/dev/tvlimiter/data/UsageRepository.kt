@@ -5,6 +5,7 @@ import dev.tvlimiter.domain.DayUsage
 import dev.tvlimiter.domain.GrantChoice
 import dev.tvlimiter.domain.UsageLedger
 import java.io.File
+import java.io.IOException
 import java.time.Clock
 import java.time.DayOfWeek
 import java.time.LocalDate
@@ -39,9 +40,15 @@ class UsageRepository(
         return rolled
     }
 
+    // The cache is updated first and the file write is best effort, so a full disk can't stop
+    // time from counting or the block check from running. The next save writes it again.
     private fun save(usage: DayUsage) {
-        store.write(usage)
         cached = usage
+        try {
+            store.write(usage)
+        } catch (e: IOException) {
+            // Kept in memory; retried on the next save.
+        }
     }
 
     companion object {
