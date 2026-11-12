@@ -42,4 +42,10 @@ class TickAccountantTest {
         assertTrue(exempt.isExempt("com.google.android.tvlauncher"))
         assertFalse(exempt.isExempt("com.netflix.ninja"))
     }
+
+    @Test
+    fun `the settings fallback home screen is not treated as a launcher`() {
+        val resolvers = listOf("com.google.android.tvlauncher" to 0, "com.android.tv.settings" to -1000)
+        assertEquals(setOf("com.google.android.tvlauncher"), ExemptPackages.launchers(resolvers))
+    }
 }
