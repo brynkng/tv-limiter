@@ -1,0 +1,927 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Ideation: Android TV App Limiter</title>
+    <style>
+      :root {
+        --bg: #fbfaf7;
+        --fg: #1f2328;
+        --muted: #57606a;
+        --card: #ffffff;
+        --line: #d8dee4;
+        --accent: #2d5f8a;
+        --chip: #e8f0f7;
+        --chip-fg: #1d4566;
+        --warn: #fdf3e1;
+        --warn-fg: #7a4b00;
+        --good: #e6f4ea;
+        --good-fg: #1d5b2e;
+        --svg-a: #2d5f8a;
+        --svg-b: #c58a1c;
+        --svg-c: #8c959f;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme="light"]) {
+          --bg: #15181c;
+          --fg: #e6e8eb;
+          --muted: #a0a8b0;
+          --card: #1d2126;
+          --line: #333a42;
+          --accent: #7fb2de;
+          --chip: #23364a;
+          --chip-fg: #cfe3f5;
+          --warn: #3a2d14;
+          --warn-fg: #f2d39a;
+          --good: #1c3324;
+          --good-fg: #b7e4c2;
+          --svg-a: #7fb2de;
+          --svg-b: #e0b257;
+          --svg-c: #6e7781;
+        }
+      }
+      :root[data-theme="dark"] {
+        --bg: #15181c;
+        --fg: #e6e8eb;
+        --muted: #a0a8b0;
+        --card: #1d2126;
+        --line: #333a42;
+        --accent: #7fb2de;
+        --chip: #23364a;
+        --chip-fg: #cfe3f5;
+        --warn: #3a2d14;
+        --warn-fg: #f2d39a;
+        --good: #1c3324;
+        --good-fg: #b7e4c2;
+        --svg-a: #7fb2de;
+        --svg-b: #e0b257;
+        --svg-c: #6e7781;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--fg);
+        font:
+          16px/1.6 -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          Roboto,
+          Helvetica,
+          Arial,
+          sans-serif;
+      }
+      main {
+        max-width: 760px;
+        margin: 0 auto;
+        padding: 32px 16px 64px;
+      }
+      h1 {
+        font-size: 2rem;
+        line-height: 1.25;
+        margin: 0 0 8px;
+      }
+      h2 {
+        font-size: 1.4rem;
+        margin: 48px 0 12px;
+        padding-bottom: 6px;
+        border-bottom: 1px solid var(--line);
+      }
+      h3 {
+        font-size: 1.15rem;
+        margin: 0 0 10px;
+      }
+      .eyebrow {
+        color: var(--muted);
+        font-size: 0.9rem;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+      }
+      .sub {
+        color: var(--muted);
+        margin: 0 0 16px;
+      }
+      details.meta {
+        margin: 8px 0 24px;
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+      details.meta dl {
+        display: grid;
+        grid-template-columns: max-content 1fr;
+        gap: 4px 16px;
+      }
+      details.meta dt {
+        font-family: ui-monospace, Menlo, monospace;
+      }
+      details.meta dd {
+        margin: 0;
+      }
+      nav.toc ol {
+        padding-left: 20px;
+        margin: 0 0 16px;
+      }
+      nav.toc a,
+      a {
+        color: var(--accent);
+      }
+      article.idea {
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 20px;
+        margin: 20px 0;
+      }
+      .chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin: 0 0 12px;
+      }
+      .chip {
+        background: var(--chip);
+        color: var(--chip-fg);
+        border-radius: 999px;
+        padding: 2px 10px;
+        font-size: 0.82rem;
+      }
+      article.idea dl {
+        margin: 0;
+      }
+      article.idea dt {
+        font-weight: 650;
+        margin-top: 10px;
+      }
+      article.idea dd {
+        margin: 2px 0 0;
+      }
+      .figure {
+        margin: 14px 0 4px;
+        overflow-x: auto;
+      }
+      .figure svg {
+        display: block;
+        max-width: 100%;
+        height: auto;
+      }
+      .callout {
+        background: var(--warn);
+        color: var(--warn-fg);
+        border-radius: 8px;
+        padding: 10px 14px;
+        margin: 12px 0;
+        font-size: 0.95rem;
+      }
+      .top {
+        background: var(--good);
+        color: var(--good-fg);
+        border-radius: 8px;
+        padding: 12px 16px;
+        margin: 16px 0;
+      }
+      .tablewrap {
+        overflow-x: auto;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        font-size: 0.93rem;
+      }
+      th,
+      td {
+        text-align: left;
+        vertical-align: top;
+        padding: 8px 10px;
+        border-bottom: 1px solid var(--line);
+      }
+      th {
+        color: var(--muted);
+        font-weight: 600;
+      }
+      ul.axes {
+        padding-left: 20px;
+      }
+      code {
+        font-family: ui-monospace, Menlo, monospace;
+        font-size: 0.9em;
+      }
+      footer.composition-signal {
+        margin-top: 48px;
+        color: var(--muted);
+        font-size: 0.85rem;
+        border-top: 1px solid var(--line);
+        padding-top: 12px;
+      }
+      svg text {
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        fill: var(--fg);
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <div class="eyebrow">Ideation</div>
+        <h1>Ideation: Android TV App Limiter</h1>
+        <p class="sub">
+          <time datetime="2026-11-11">2026-11-11</time> · Focus: per-app daily
+          limits with a weekday schedule, a masked PIN override at time-up, and
+          whole-TV limits with the same options
+        </p>
+      </header>
+      <details class="meta">
+        <summary>Document metadata</summary>
+        <dl>
+          <dt>date</dt>
+          <dd>2026-11-11</dd>
+          <dt>topic</dt>
+          <dd>android-tv-app-limiter</dd>
+          <dt>mode</dt>
+          <dd>elsewhere-software</dd>
+        </dl>
+      </details>
+
+      <div class="top">
+        <strong>Top pick:</strong> I1, one rule model where the whole TV is a
+        pool and each app limit is a cap inside it. It is the decision your main
+        feature and your whole-TV feature both rest on, and once it exists,
+        everything else (warnings, PIN grants, history, bedtime) is written once
+        instead of twice.
+      </div>
+
+      <section id="grounding-context">
+        <h2>Grounding Context</h2>
+        <h3>Topic Context</h3>
+        <p>
+          <strong>What is being built.</strong> A personal or family Android TV
+          app modeled on TVGuard. In your priority order: (1) pick an installed
+          app and set a daily limit; (2) a weekday schedule so each day can have
+          its own limit; (3) at time-up, a confirmation window with a PIN
+          override; (4) PIN entry masked from onlookers using D-pad arrows; (5)
+          whole-TV limits with the same options. You left it open with "what
+          else?".
+        </p>
+        <p>
+          <strong>Still unsettled.</strong> What an override grants (rest of day
+          or a fixed extension), warnings before expiry, the reset hour, who
+          holds the PIN (a parent, or you limiting yourself), bedtime windows,
+          how app and whole-TV limits interact, and how a forgotten PIN is
+          recovered.
+        </p>
+        <p>
+          <strong>Outside evidence.</strong> TVGuard pairs a TV app with a phone
+          app, tracks with Usage Access, and uses Device Admin so it can't be
+          removed without the PIN. Google TV kids profiles have daily limits but
+          reportedly no per-app limits, and limits stop at one device. Fire TV
+          has reported holes: a settings page reachable without the PIN, and a
+          factory reset that starts without it. On Sony TVs, a forgotten PIN
+          means a factory reset. The usual way to detect the foreground app is
+          polling UsageStatsManager from a foreground service. Detection is
+          unreliable on some TV builds, and the overlay permission screens can
+          be missing there. Known bypasses: changing the clock or time zone,
+          rebooting, force stop, clearing data, cached sessions, launching from
+          other apps, ADB, and using a second device. On PINs, research on
+          moving-cursor D-pad entry (Springer, 10.1007/s10015-023-00890-y) and
+          scrambled keypads (arXiv 1908.09165) agrees: a fixed arrow sequence
+          can be learned by watching, and the protection comes from changing the
+          mapping every time.
+        </p>
+      </section>
+
+      <section id="topic-axes">
+        <h2>Topic Axes</h2>
+        <ul class="axes">
+          <li>Limit rules and schedules</li>
+          <li>The time-up moment</li>
+          <li>PIN override and masked entry</li>
+          <li>Enforcement and tamper resistance</li>
+          <li>Setup and visibility</li>
+        </ul>
+      </section>
+
+      <section id="ranked-ideas">
+        <h2>Ranked Ideas</h2>
+        <nav class="toc" aria-label="Ranked ideas">
+          <ol>
+            <li>
+              <a href="#i1"
+                >I1. One rule model: whole-TV pool, per-app caps inside it</a
+              >
+            </li>
+            <li>
+              <a href="#i2"
+                >I2. A scrambled arrow pad that reveals nothing to a watcher</a
+              >
+            </li>
+            <li>
+              <a href="#i3"
+                >I3. The override grants a chosen amount, optionally borrowed
+                from tomorrow</a
+              >
+            </li>
+            <li><a href="#i4">I4. A weekday grid built for the remote</a></li>
+            <li><a href="#i5">I5. Wind down instead of cutting off</a></li>
+            <li>
+              <a href="#i6"
+                >I6. A usage log that charges and records every blind spot</a
+              >
+            </li>
+            <li>
+              <a href="#i7"
+                >I7. One-time override codes and recovery codes from your
+                phone</a
+              >
+            </li>
+          </ol>
+        </nav>
+
+        <article class="idea" id="i1">
+          <h3>I1. One rule model: whole-TV pool, per-app caps inside it</h3>
+          <div class="chips">
+            <span class="chip">Limit rules and schedules</span
+            ><span class="chip">Confidence 85%</span
+            ><span class="chip">Complexity Medium</span>
+          </div>
+          <dl>
+            <dt>Description</dt>
+            <dd>
+              Build one kind of limit, not two. A limit has a scope (one app, a
+              group of apps, or the whole TV), a seven-day table of minutes, a
+              reset hour, and an override policy. Every minute in an app counts
+              against every limit that covers it, and whichever runs out first
+              blocks. The block screen names the limit that fired ("YouTube is
+              done for today" vs "TV time is used up"), and the PIN override
+              applies to that limit only. Groups such as "all streaming apps
+              share 90 minutes" come almost for free.
+            </dd>
+            <dt>Basis</dt>
+            <dd>
+              direct: "Let's also put in general TV limits. For with the same
+              customization options." The same options mean the same data shape.
+              The grounding lists "how per-app and whole-TV limits interact" as
+              unsettled. external: corporate cards have an overall limit plus
+              caps per spending category, and a charge must clear both.
+            </dd>
+            <dt>Rationale</dt>
+            <dd>
+              If the two limit types are built as separate timers, every later
+              feature needs two versions, and users get blocks they can't
+              explain (the app still has time but the TV is locked). One model
+              with a "tightest wins" rule answers the open interaction question
+              and makes groups, bedtime windows, and profiles new scope values
+              instead of new systems.
+            </dd>
+            <dt>Downsides</dt>
+            <dd>
+              More design up front than a single per-app counter. Overlapping
+              limits need a clear on-screen explanation, or the "which rule
+              fired" message becomes confusing.
+            </dd>
+          </dl>
+          <div
+            class="figure"
+            role="img"
+            aria-label="The whole-TV budget is an outer box. Per-app limits for YouTube and Netflix sit inside it as smaller boxes. A minute in YouTube is charged to both the YouTube cap and the TV pool."
+          >
+            <svg
+              viewBox="0 0 600 190"
+              width="600"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <rect
+                x="10"
+                y="10"
+                width="580"
+                height="170"
+                rx="12"
+                fill="none"
+                stroke="var(--svg-a)"
+                stroke-width="2"
+              />
+              <text x="28" y="38" font-size="15" font-weight="600">
+                Whole-TV pool: 3h today
+              </text>
+              <rect
+                x="40"
+                y="60"
+                width="200"
+                height="90"
+                rx="10"
+                fill="none"
+                stroke="var(--svg-b)"
+                stroke-width="2"
+              />
+              <text x="60" y="92" font-size="14" font-weight="600">
+                YouTube cap
+              </text>
+              <text x="60" y="116" font-size="13">1h on Tuesdays</text>
+              <rect
+                x="270"
+                y="60"
+                width="200"
+                height="90"
+                rx="10"
+                fill="none"
+                stroke="var(--svg-b)"
+                stroke-width="2"
+              />
+              <text x="290" y="92" font-size="14" font-weight="600">
+                Streaming group
+              </text>
+              <text x="290" y="116" font-size="13">90 min, shared</text>
+              <text x="488" y="98" font-size="13">Tightest</text>
+              <text x="488" y="116" font-size="13">wins</text>
+            </svg>
+          </div>
+        </article>
+
+        <article class="idea" id="i2">
+          <h3>I2. A scrambled arrow pad that reveals nothing to a watcher</h3>
+          <div class="chips">
+            <span class="chip">PIN override and masked entry</span
+            ><span class="chip">Confidence 85%</span
+            ><span class="chip">Complexity Low</span>
+          </div>
+          <dl>
+            <dt>Description</dt>
+            <dd>
+              Keep your "arrows for the numbers" idea and add the part that
+              makes it secure. The entry field shows only dots. A digit strip is
+              on screen, but the cursor starts on a random digit each time,
+              jumps to a new random digit after each OK press, and the digit
+              order is reshuffled on every entry. Someone watching sees "left,
+              left, up, OK", which tells them nothing. Build it as one component
+              and reuse it for the override, opening settings, changing the PIN,
+              and recovery.
+            </dd>
+            <dt>Basis</dt>
+            <dd>
+              direct: "the technique where it like just shows like arrows for
+              the numbers" (your request). external: the moving-cursor D-pad
+              scheme in Springer 10.1007/s10015-023-00890-y, where "the cursor's
+              position changes after each press so the chosen digit is not
+              revealed", and scrambled keypads (arXiv 1908.09165). direct: "a
+              plain D-pad sequence as the PIN is observable; the protection
+              comes from randomizing the mapping each time."
+            </dd>
+            <dt>Rationale</dt>
+            <dd>
+              Read literally, an arrow-sequence PIN can be learned by a kid
+              sitting on the couch in a couple of evenings. Randomizing the
+              mapping each time is what makes the masking you asked for actually
+              work, and building it once protects every PIN entry point in the
+              app.
+            </dd>
+            <dt>Downsides</dt>
+            <dd>
+              Entry is slower than a fixed keypad. Research on scrambled keypads
+              confirms the slowdown, so test whether the family tolerates it.
+              This adopts the published scheme rather than inventing a new one.
+            </dd>
+          </dl>
+          <div
+            class="figure"
+            role="img"
+            aria-label="Comparison. A fixed arrow PIN: the same presses every time, so a watcher learns it. A scrambled pad: random start and reshuffled digits, so the presses differ every time."
+          >
+            <svg
+              viewBox="0 0 600 150"
+              width="600"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <text x="20" y="28" font-size="14" font-weight="600">
+                Fixed arrow PIN
+              </text>
+              <text x="20" y="54" font-size="13">Mon: ← ← ↑ OK</text>
+              <text x="20" y="76" font-size="13">Tue: ← ← ↑ OK</text>
+              <text x="20" y="108" font-size="13" fill="var(--svg-b)">
+                Watcher learns it
+              </text>
+              <line
+                x1="300"
+                y1="15"
+                x2="300"
+                y2="130"
+                stroke="var(--svg-c)"
+                stroke-width="1"
+              />
+              <text x="320" y="28" font-size="14" font-weight="600">
+                Scrambled pad
+              </text>
+              <text x="320" y="54" font-size="13">Mon: → OK ← ← OK ↑ OK</text>
+              <text x="320" y="76" font-size="13">Tue: ← ← OK → OK OK</text>
+              <text x="320" y="108" font-size="13" fill="var(--svg-a)">
+                Presses mean nothing
+              </text>
+            </svg>
+          </div>
+        </article>
+
+        <article class="idea" id="i3">
+          <h3>
+            I3. The override grants a chosen amount, optionally borrowed from
+            tomorrow
+          </h3>
+          <div class="chips">
+            <span class="chip">PIN override and masked entry</span
+            ><span class="chip">Confidence 80%</span
+            ><span class="chip">Complexity Low</span>
+          </div>
+          <dl>
+            <dt>Description</dt>
+            <dd>
+              A correct PIN doesn't just switch the limit off. It opens a short
+              menu: +15 min, +30 min, finish this episode, or rest of day. Each
+              limit's policy decides which options appear, and there's a daily
+              cap on grants. An optional "borrow" setting takes the minutes from
+              tomorrow's allowance, like the emergency credit on a prepaid
+              electricity meter, and says so on screen: "Unlocking adds 30 min
+              today. Tomorrow drops from 2h to 1h30." Every grant is recorded.
+            </dd>
+            <dt>Basis</dt>
+            <dd>
+              direct: "Unsettled: what a PIN override grants (rest of day vs
+              fixed extension)". external: prepaid meters give a fixed emergency
+              credit that the next top-up pays back first. The grounding also
+              mentions Nintendo letting a player finish the current game.
+            </dd>
+            <dt>Rationale</dt>
+            <dd>
+              If the override can only grant everything, the PIN holder learns
+              to say no, or one PIN entry ends limiting for the day. Small,
+              visible grants make "yes" cheap without making the limit
+              meaningless. Borrowing keeps the weekly total honest, which also
+              suits the case where you are limiting yourself.
+            </dd>
+            <dt>Downsides</dt>
+            <dd>
+              Another screen after the PIN. Borrowing needs clear wording, or
+              tomorrow's lower limit feels like a bug.
+            </dd>
+          </dl>
+        </article>
+
+        <article class="idea" id="i4">
+          <h3>I4. A weekday grid built for the remote</h3>
+          <div class="chips">
+            <span class="chip">Setup and visibility</span
+            ><span class="chip">Confidence 80%</span
+            ><span class="chip">Complexity Medium</span>
+          </div>
+          <dl>
+            <dt>Description</dt>
+            <dd>
+              The app picker lists apps by actual recent usage (Usage Access
+              already provides it), so the heavy apps are at the top. Picking
+              one opens a single screen of seven bars: left and right pick a
+              day, up and down change minutes in 15-minute steps, and a long
+              press on OK offers "copy to weekdays" or "copy to weekend". The
+              same grid handles the whole-TV limit. Like a programmable
+              thermostat, a change made from the block screen asks "today only,
+              or change the schedule?".
+            </dd>
+            <dt>Basis</dt>
+            <dd>
+              direct: "being able to set a schedule for which days of the week
+              gets which time limit" (your request). external: seven-day
+              programmable thermostats solved per-day settings with only a few
+              buttons, using day groups, copy, and "temporary hold" vs
+              "permanent change". TVGuard moves setup to a phone, which suggests
+              setup with a remote is painful.
+            </dd>
+            <dt>Rationale</dt>
+            <dd>
+              Your main feature is seven numbers per app. If you enter them one
+              field at a time with a D-pad, people give up and keep the
+              defaults. One grid with copy shortcuts turns that into one or two
+              edits.
+            </dd>
+            <dt>Downsides</dt>
+            <dd>
+              A custom TV control has to be built and tuned for focus behavior.
+              Fifteen-minute steps may feel too coarse for small limits.
+            </dd>
+          </dl>
+          <div
+            class="figure"
+            role="img"
+            aria-label="Seven vertical bars, Monday through Sunday. Weekday bars are shorter and weekend bars are taller."
+          >
+            <svg
+              viewBox="0 0 600 170"
+              width="600"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <g fill="var(--svg-a)">
+                <rect x="40" y="90" width="50" height="50" rx="4" />
+                <rect x="115" y="90" width="50" height="50" rx="4" />
+                <rect x="190" y="90" width="50" height="50" rx="4" />
+                <rect x="265" y="90" width="50" height="50" rx="4" />
+                <rect x="340" y="70" width="50" height="70" rx="4" />
+              </g>
+              <g fill="var(--svg-b)">
+                <rect x="415" y="30" width="50" height="110" rx="4" />
+                <rect x="490" y="40" width="50" height="100" rx="4" />
+              </g>
+              <g font-size="12">
+                <text x="52" y="160">Mon</text>
+                <text x="128" y="160">Tue</text>
+                <text x="201" y="160">Wed</text>
+                <text x="277" y="160">Thu</text>
+                <text x="355" y="160">Fri</text>
+                <text x="429" y="160">Sat</text>
+                <text x="503" y="160">Sun</text>
+                <text x="52" y="82">1h</text>
+                <text x="127" y="82">1h</text>
+                <text x="202" y="82">1h</text>
+                <text x="277" y="82">1h</text>
+                <text x="345" y="62">1h30</text>
+                <text x="430" y="22">3h</text>
+                <text x="497" y="32">2h45</text>
+              </g>
+            </svg>
+          </div>
+        </article>
+
+        <article class="idea" id="i5">
+          <h3>I5. Wind down instead of cutting off</h3>
+          <div class="chips">
+            <span class="chip">The time-up moment</span
+            ><span class="chip">Confidence 65%</span
+            ><span class="chip">Complexity Medium</span>
+          </div>
+          <dl>
+            <dt>Description</dt>
+            <dd>
+              Opening an app shows a small "40 min left today" badge, so time-up
+              isn't a surprise. If the budget is already empty, the app is
+              blocked as soon as it's detected. That also catches cached
+              sessions and launches from other apps. Corner warnings appear at
+              10, 5, and 1 minute. At zero there's a short capped grace (for
+              example 5 minutes) before the PIN window appears. Where it can be
+              detected, the grace ends early when playback pauses or the episode
+              ends.
+            </dd>
+            <dt>Basis</dt>
+            <dd>
+              direct: the grounding names "warning countdown before block" as a
+              gap, and lists "cached sessions reopening an app, launching via
+              intents from other apps" as bypasses. external: Nintendo Switch
+              parental controls choose between alarm only and suspending the
+              software, and let a player finish the current game.
+            </dd>
+            <dt>Rationale</dt>
+            <dd>
+              An abrupt mid-scene cut is when people demand the PIN or look for
+              a bypass. A predictable wind-down makes your confirmation window
+              rarer and less of a fight.
+            </dd>
+            <dt>Downsides</dt>
+            <dd>
+              Detecting a natural break means reading other apps' media
+              sessions, which needs notification-listener access, and many TV
+              apps don't report usable state. The capped grace has to be the
+              default, with the smart ending as a bonus. Polling has a lag of
+              under a second, so "block before anything shows" is really "block
+              almost immediately". The grace could become a loophole if it isn't
+              capped.
+            </dd>
+          </dl>
+          <div class="callout">
+            Check on real hardware before you commit: whether the overlay
+            permission and notification-listener access can be granted on your
+            specific TV.
+          </div>
+        </article>
+
+        <article class="idea" id="i6">
+          <h3>I6. A usage log that charges and records every blind spot</h3>
+          <div class="chips">
+            <span class="chip">Enforcement and tamper resistance</span
+            ><span class="chip">Confidence 65%</span
+            ><span class="chip">Complexity Medium</span>
+          </div>
+          <dl>
+            <dt>Description</dt>
+            <dd>
+              Keep one append-only record of viewing sessions, timed by the
+              monotonic clock (elapsed time since boot) and checked against
+              network time when available. The remaining-time badge, warnings,
+              history, and limit checks are all read from it. The day resets
+              only when the wall clock moves forward and that much elapsed time
+              has really passed, so setting the clock back never refills the
+              budget. After a reboot, force stop, or crash, the app replays the
+              system's usage events to fill the gap, and time it still can't
+              account for counts as used. The same record holds a short "things
+              that look off" list that you see after a correct PIN: clock moved
+              back, tracking off for 52 minutes, usage permission revoked.
+            </dd>
+            <dt>Basis</dt>
+            <dd>
+              direct: the bypasses listed in the grounding: "changing clock or
+              time zone, reboot resetting timers, ... force stop, clear data".
+              external: "Mitigations: monotonic clock plus network time, boot
+              receiver". Flight recorders and tamper-evident seals rely on
+              detection rather than prevention. reasoned: a sideloaded app can't
+              block every bypass, but making each one costly and visible deters
+              most of them.
+            </dd>
+            <dt>Rationale</dt>
+            <dd>
+              Changing the clock is the easiest bypass a kid will find, and it
+              sits in plain TV settings. A limit that quietly stops working is
+              worse than none. One record that charges and logs the gaps covers
+              a whole group of bypasses at once, and history comes for free.
+            </dd>
+            <dt>Downsides</dt>
+            <dd>
+              Android only keeps usage events for days, not weeks, and they can
+              be sparse on some TV builds, so replay is a best effort. Nothing
+              survives clearing data or a factory reset unless Device Admin
+              blocks those. "Unexplained time counts as used" will sometimes
+              charge for a genuine crash.
+            </dd>
+          </dl>
+        </article>
+
+        <article class="idea" id="i7">
+          <h3>
+            I7. One-time override codes and recovery codes from your phone
+          </h3>
+          <div class="chips">
+            <span class="chip">PIN override and masked entry</span
+            ><span class="chip">Confidence 60%</span
+            ><span class="chip">Complexity Medium</span>
+          </div>
+          <dl>
+            <dt>Description</dt>
+            <dd>
+              Alongside the static PIN, the override accepts a one-time code.
+              The simple version: pair a standard authenticator app on your
+              phone by scanning a QR code at setup, then type the current
+              6-digit code on the scrambled pad. The stronger version: the block
+              screen shows a short challenge number, and your phone turns that
+              number plus a chosen grant ("30 min") into a reply code. The reply
+              works once, only for that challenge, and can be read out over a
+              phone call when you're away. At setup the app also shows a few
+              single-use recovery codes, once, to print and keep, so a forgotten
+              PIN never means a factory reset.
+            </dd>
+            <dt>Basis</dt>
+            <dd>
+              direct: "one-time codes instead of a static PIN" and "remote 'ask
+              for more time'" are named gaps. direct: "Sony TVs: forgotten PIN
+              requires a factory reset (bad recovery design)." external: bank
+              hardware tokens, standard TOTP authenticators, and two-factor
+              backup codes.
+            </dd>
+            <dt>Rationale</dt>
+            <dd>
+              Masking protects one entry. A one-time code makes an observed
+              entry worthless. Today, when the parent is out, the PIN gets
+              texted to the kid and is leaked for good. This works offline and
+              needs no server. The recovery codes settle the forgotten-PIN
+              question in the same step.
+            </dd>
+            <dt>Downsides</dt>
+            <dd>
+              The challenge version needs a small phone-side tool to compute
+              replies. The plain TOTP version avoids that but can't carry a
+              grant amount. If the app is only for limiting yourself, this adds
+              little.
+            </dd>
+          </dl>
+        </article>
+      </section>
+
+      <section id="rejection-summary">
+        <h2>Rejection Summary</h2>
+        <div class="tablewrap">
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Idea</th>
+                <th>Reason Rejected</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>1</td>
+                <td>
+                  Self-control mode: a delay before unlock, or a generated PIN
+                  you give away
+                </td>
+                <td>
+                  Better handled as a brainstorm choice. It depends on whether
+                  the PIN holder is you or a parent, which this run can't
+                  settle. A delay also overlaps I3's borrowing rule.
+                </td>
+              </tr>
+              <tr>
+                <td>2</td>
+                <td>"Ask for more time" pushed to a parent's phone</td>
+                <td>
+                  Too expensive for the value: it needs a phone app plus a push
+                  channel. I7's challenge codes cover the same case offline.
+                </td>
+              </tr>
+              <tr>
+                <td>3</td>
+                <td>
+                  Configure from a phone browser through a web page served by
+                  the TV
+                </td>
+                <td>
+                  A large jump in scope, and the editor's own authentication
+                  could become a bypass. I4 makes setup on the remote good
+                  enough first. Revisit after I1 and I4.
+                </td>
+              </tr>
+              <tr>
+                <td>4</td>
+                <td>
+                  Swappable foreground detectors with an on-device self-test
+                </td>
+                <td>
+                  Engineering housekeeping rather than a product direction. The
+                  useful part (a health indicator when detection fails) folds
+                  into I6.
+                </td>
+              </tr>
+              <tr>
+                <td>5</td>
+                <td>
+                  One PIN gate for every sensitive screen, with our own settings
+                  treated as a limited app
+                </td>
+                <td>
+                  Already covered: it follows from having a PIN at all. It's a
+                  requirement to remember, not an idea to choose.
+                </td>
+              </tr>
+              <tr>
+                <td>6</td>
+                <td>A reason picked at each override, plus a weekly review</td>
+                <td>
+                  Below the bar for discussion: friction with little payoff. The
+                  usage history it relies on already comes with I6.
+                </td>
+              </tr>
+              <tr>
+                <td>7</td>
+                <td>
+                  A whole-house budget shared across TVs on the home network
+                </td>
+                <td>
+                  Too expensive for a personal app (discovery, trust, sync), and
+                  it still doesn't cover phones or tablets.
+                </td>
+              </tr>
+              <tr>
+                <td>8</td>
+                <td>Unused minutes roll over to the next day</td>
+                <td>
+                  Shallow, and it weakens limits by letting time be saved up.
+                  It's a one-line policy option under I1 if wanted.
+                </td>
+              </tr>
+              <tr>
+                <td>9</td>
+                <td>Override reasons that suggest raising a day's limit</td>
+                <td>
+                  The verifier refuted it: it nudges toward weaker limits based
+                  on self-reported reasons, and it depends on a weak idea (row
+                  6).
+                </td>
+              </tr>
+              <tr>
+                <td>10</td>
+                <td>Grant amount built into the challenge code</td>
+                <td>
+                  Duplicates a stronger idea: folded into I7 as its stronger
+                  version.
+                </td>
+              </tr>
+              <tr>
+                <td>11</td>
+                <td>Budget check at launch with a remaining-time badge</td>
+                <td>Duplicates a stronger idea: folded into I5.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <footer class="composition-signal">
+        Composed 2026-11-11 by ce-ideate from the user's request (Android TV app
+        limiter). 46 raw ideas from five idea agents, merged to 18 plus 3
+        combinations, checked by an independent verifier.
+      </footer>
+    </main>
+  </body>
+</html>
