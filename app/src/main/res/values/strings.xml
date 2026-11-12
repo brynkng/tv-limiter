@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">TV Limiter</string>
+    <string name="tracking_channel">Screen time tracking</string>
+    <string name="tracking_notification">TV Limiter is counting screen time</string>
 </resources>
