@@ -1,0 +1,84 @@
+package dev.tvlimiter.domain
+
+import kotlinx.serialization.Serializable
+
+/**
+ * The stored PIN plus the failure count and lockout. The lockout lives here, not in memory,
+ * so leaving the screen or switching to another PIN prompt doesn't reset it.
+ */
+@Serializable
+data class PinRecord(
+    val salt: String,
+    val hash: String,
+    val iterations: Int,
+    val failures: Int = 0,
+    /** Elapsed-realtime millis when the current lockout began, or null when not locked. */
+    val lockStartedAt: Long? = null,
+)
+
+interface PinStore {
+    fun load(): PinRecord?
+    fun save(record: PinRecord)
+}
+
+sealed interface PinCheck {
+    data object Ok : PinCheck
+    data class Wrong(val triesLeft: Int) : PinCheck
+    data class LockedOut(val secondsLeft: Int) : PinCheck
+    data object NoPin : PinCheck
+}
+
+/**
+ * Checks PIN attempts and locks entry for a minute after five wrong PINs in a row.
+ * Time comes from a monotonic clock, so changing the wall clock can't end a lockout.
+ */
+class PinGuard(
+    private val store: PinStore,
+    private val hasher: PinHasher,
+    private val elapsedMillis: () -> Long,
+) {
+    fun hasPin(): Boolean = store.load() != null
+
+    fun setPin(pin: String) = store.save(hasher.create(pin))
+
+    fun lockoutSecondsLeft(): Int {
+        val record = store.load() ?: return 0
+        val started = record.lockStartedAt ?: return 0
+        val now = elapsedMillis()
+        if (now < started) {
+            // The monotonic clock restarted, so the device rebooted. Start the minute again.
+            store.save(record.copy(lockStartedAt = now))
+            return LOCKOUT_SECONDS
+        }
+        val leftMillis = started + LOCKOUT_SECONDS * 1000L - now
+        if (leftMillis <= 0) return 0
+        return ((leftMillis + 999) / 1000).toInt()
+    }
+
+    fun check(pin: String): PinCheck {
+        if (store.load() == null) return PinCheck.NoPin
+        val locked = lockoutSecondsLeft()
+        if (locked > 0) return PinCheck.LockedOut(locked)
+        val record = store.load() ?: return PinCheck.NoPin
+        val fresh = if (record.lockStartedAt != null) record.copy(failures = 0, lockStartedAt = null) else record
+        if (hasher.verify(pin, fresh)) {
+            store.save(fresh.copy(failures = 0, lockStartedAt = null))
+            return PinCheck.Ok
+        }
+        val failures = fresh.failures + 1
+        return if (failures >= MAX_FAILURES) {
+            store.save(fresh.copy(failures = failures, lockStartedAt = elapsedMillis()))
+            PinCheck.LockedOut(LOCKOUT_SECONDS)
+        } else {
+            store.save(fresh.copy(failures = failures))
+            PinCheck.Wrong(MAX_FAILURES - failures)
+        }
+    }
+
+    companion object {
+        const val MAX_FAILURES = 5
+        const val LOCKOUT_SECONDS = 60
+        const val MIN_LENGTH = 4
+        const val MAX_LENGTH = 8
+    }
+}
