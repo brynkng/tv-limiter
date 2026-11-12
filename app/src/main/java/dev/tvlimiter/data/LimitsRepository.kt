@@ -18,8 +18,6 @@ class LimitsRepository(private val store: JsonFileStore<LimitsFile>) {
 
     fun all(): List<Limit> = synchronized(lock) { load() }
 
-    fun wholeTv(): Limit = all().firstOrNull { it.isWholeTv } ?: Limit.defaultWholeTv()
-
     fun find(id: String): Limit? = all().firstOrNull { it.id == id }
 
     fun upsert(limit: Limit) = synchronized(lock) {

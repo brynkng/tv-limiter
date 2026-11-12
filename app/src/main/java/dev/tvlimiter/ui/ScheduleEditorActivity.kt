@@ -6,11 +6,9 @@ import android.os.Bundle
 import android.view.KeyEvent
 import android.widget.Button
 import android.widget.LinearLayout
-import android.widget.ScrollView
 import dev.tvlimiter.R
 import dev.tvlimiter.data.LimitsRepository
 import dev.tvlimiter.domain.Limit
-import dev.tvlimiter.domain.LimitScope
 import java.time.DayOfWeek
 import java.time.format.TextStyle
 import java.util.Locale
@@ -26,13 +24,7 @@ class ScheduleEditorActivity : GuardedActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         limitId = intent.getStringExtra(EXTRA_LIMIT_ID) ?: return finish()
-        content = column().apply { setPadding(dp(48), dp(32), dp(48), dp(32)) }
-        setContentView(
-            ScrollView(this).apply {
-                setBackgroundColor(color(R.color.bg))
-                addView(content)
-            },
-        )
+        content = scrollScreen()
     }
 
     override fun onUnlockedResume() {
@@ -44,11 +36,7 @@ class ScheduleEditorActivity : GuardedActivity() {
     private fun build(limit: Limit) {
         content.removeAllViews()
         dayRows.clear()
-        val name = when (val scope = limit.scope) {
-            LimitScope.WholeTv -> "TV time"
-            is LimitScope.App -> BlockActivity.appLabel(packageManager, scope.packageName)
-        }
-        content.addView(label(name, sizeSp = 30f, bold = true))
+        content.addView(label(limitName(limit), sizeSp = 30f, bold = true))
         content.addView(
             label(
                 "Left and right change a day by 15 minutes. Going below 0 means no limit that day.",
@@ -56,7 +44,7 @@ class ScheduleEditorActivity : GuardedActivity() {
                 colorId = R.color.muted,
             ).margins(this, top = 8),
         )
-        DayOfWeek.entries.forEachIndexed { index, day ->
+        DayOfWeek.entries.forEachIndexed { index, _ ->
             val row = tvButton("") {}
             row.setOnKeyListener { _, keyCode, event ->
                 if (event.action != KeyEvent.ACTION_DOWN) return@setOnKeyListener false
@@ -69,7 +57,6 @@ class ScheduleEditorActivity : GuardedActivity() {
                 true
             }
             row.minWidth = dp(420)
-            row.tag = day
             dayRows += row
             content.addView(row.margins(this, top = 8))
         }
@@ -91,25 +78,21 @@ class ScheduleEditorActivity : GuardedActivity() {
         dayRows.first().requestFocus()
     }
 
-    private fun save() {
-        val repo = LimitsRepository.get(this)
-        val limit = repo.find(limitId) ?: return finish()
-        val updated = limit.copy(minutesByDay = state.minutes)
-        repo.upsert(updated)
-        refresh(updated)
-    }
+    private fun save() = update { it.copy(minutesByDay = state.minutes) }
 
-    private fun toggleEnabled() {
+    private fun toggleEnabled() = update { it.copy(enabled = !it.enabled) }
+
+    private fun update(change: (Limit) -> Limit) {
         val repo = LimitsRepository.get(this)
         val limit = repo.find(limitId) ?: return finish()
-        val updated = limit.copy(enabled = !limit.enabled)
+        val updated = change(limit)
         repo.upsert(updated)
         refresh(updated)
     }
 
     private fun refresh(limit: Limit) {
         dayRows.forEachIndexed { index, row ->
-            val day = (row.tag as DayOfWeek).getDisplayName(TextStyle.FULL, Locale.getDefault())
+            val day = DayOfWeek.entries[index].getDisplayName(TextStyle.FULL, Locale.getDefault())
             row.text = "◀  $day: ${ScheduleEditorState.describe(state.minutes[index])}  ▶"
         }
         enableButton?.text = if (limit.enabled) "Turn off" else "Turn on"

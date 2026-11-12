@@ -1,5 +1,6 @@
 package dev.tvlimiter.ui
 
+import android.app.Activity
 import android.content.Context
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
@@ -9,8 +10,11 @@ import android.view.Gravity
 import android.view.View
 import android.widget.Button
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import dev.tvlimiter.R
+import dev.tvlimiter.domain.Limit
+import dev.tvlimiter.domain.LimitScope
 
 /** Small helpers for building the D-pad screens in code. */
 internal fun Context.dp(value: Int): Int =
@@ -66,6 +70,23 @@ internal fun View.margins(context: Context, all: Int = 0, top: Int = all, end: I
         marginEnd = context.dp(end)
     }
     return this
+}
+
+/** Sets a padded, scrolling column as the screen's content and returns the column to fill. */
+internal fun Activity.scrollScreen(): LinearLayout {
+    val content = column().apply { setPadding(dp(48), dp(32), dp(48), dp(32)) }
+    setContentView(
+        ScrollView(this).apply {
+            setBackgroundColor(color(R.color.bg))
+            addView(content)
+        },
+    )
+    return content
+}
+
+internal fun Context.limitName(limit: Limit): String = when (val scope = limit.scope) {
+    LimitScope.WholeTv -> "TV time"
+    is LimitScope.App -> BlockActivity.appLabel(packageManager, scope.packageName)
 }
 
 internal fun formatMinutes(seconds: Long): String {

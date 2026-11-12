@@ -4,7 +4,6 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.widget.LinearLayout
-import android.widget.ScrollView
 import dev.tvlimiter.R
 import dev.tvlimiter.data.LimitsRepository
 import dev.tvlimiter.data.UsageRepository
@@ -16,13 +15,7 @@ class AppPickerActivity : GuardedActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        content = column().apply { setPadding(dp(48), dp(32), dp(48), dp(32)) }
-        setContentView(
-            ScrollView(this).apply {
-                setBackgroundColor(color(R.color.bg))
-                addView(content)
-            },
-        )
+        content = scrollScreen()
     }
 
     override fun onUnlockedResume() {

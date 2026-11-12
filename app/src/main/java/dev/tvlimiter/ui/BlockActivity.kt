@@ -30,6 +30,7 @@ class BlockActivity : Activity() {
     private lateinit var pad: PinPadView
     private lateinit var grantPanel: LinearLayout
     private lateinit var grantTitle: TextView
+    private lateinit var grantChoices: LinearLayout
     private lateinit var homeButton: View
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -91,7 +92,7 @@ class BlockActivity : Activity() {
             BlockStep.GRANT -> {
                 subline.text = "Extra time applies to today only."
                 grantTitle.text = "Add time to ${model.limitName}"
-                grantPanel.getChildAt(1)?.let { (it as LinearLayout).getChildAt(0)?.requestFocus() }
+                grantChoices.getChildAt(0)?.requestFocus()
             }
             BlockStep.DONE -> Unit
         }
@@ -120,6 +121,7 @@ class BlockActivity : Activity() {
 
         grantTitle = label("", sizeSp = 22f, bold = true).apply { gravity = Gravity.CENTER }
         val choices = row().apply { gravity = Gravity.CENTER }
+        grantChoices = choices
         GrantChoice.entries.forEach { choice ->
             choices.addView(
                 tvButton(choice.label) {

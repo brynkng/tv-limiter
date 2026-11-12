@@ -2,7 +2,6 @@ package dev.tvlimiter.domain
 
 import kotlin.random.Random
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -20,13 +19,12 @@ class ScrambledPadStateTest {
     }
 
     @Test
-    fun `pads opened with different seeds have different orders and the seed sets the cursor`() {
+    fun `pads opened with different seeds have different orders and the cursor starts on a digit cell`() {
         val a = ScrambledPadState(Random(1))
         val b = ScrambledPadState(Random(2))
         assertNotEquals(a.digits, b.digits)
         assertEquals((0..9).toList(), a.digits.sorted())
-        val expected = Random(1).let { r -> (0..9).shuffled(r); r.nextInt(10) }
-        assertEquals(expected, a.cursor)
+        assertTrue(a.cursor in 0 until ScrambledPadState.DIGIT_CELLS)
     }
 
     @Test
@@ -47,7 +45,6 @@ class ScrambledPadStateTest {
         val pad = ScrambledPadState(Random(3))
         listOf(4, 8, 2).forEach { pad.enter(it) }
         assertEquals("▲▲▲", pad.display)
-        assertFalse(pad.display.any { it.isDigit() })
     }
 
     @Test

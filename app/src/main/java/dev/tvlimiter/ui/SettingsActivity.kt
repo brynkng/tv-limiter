@@ -5,7 +5,6 @@ import android.content.Intent
 import android.os.Bundle
 import android.view.View
 import android.widget.LinearLayout
-import android.widget.ScrollView
 import android.widget.Toast
 import dev.tvlimiter.R
 import dev.tvlimiter.data.LimitsRepository
@@ -13,7 +12,6 @@ import dev.tvlimiter.data.PinRepository
 import dev.tvlimiter.data.UsageRepository
 import dev.tvlimiter.domain.Limit
 import dev.tvlimiter.domain.LimitEvaluator
-import dev.tvlimiter.domain.LimitScope
 import dev.tvlimiter.service.TrackingService
 
 /** The owner's home screen: every limit with today's use, a way to add app limits, and permission status. */
@@ -23,13 +21,7 @@ class SettingsActivity : GuardedActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         TrackingService.start(this)
-        content = column().apply { setPadding(dp(48), dp(32), dp(48), dp(32)) }
-        setContentView(
-            ScrollView(this).apply {
-                setBackgroundColor(color(R.color.bg))
-                addView(content)
-            },
-        )
+        content = scrollScreen()
     }
 
     override fun unlockIntent(): Intent =
@@ -98,11 +90,6 @@ class SettingsActivity : GuardedActivity() {
         } catch (e: ActivityNotFoundException) {
             Toast.makeText(this, "This TV doesn't have that screen. Use the adb command.", Toast.LENGTH_LONG).show()
         }
-    }
-
-    private fun limitName(limit: Limit): String = when (val scope = limit.scope) {
-        LimitScope.WholeTv -> "TV time"
-        is LimitScope.App -> BlockActivity.appLabel(packageManager, scope.packageName)
     }
 
     private fun limitStatus(limit: Limit): String {

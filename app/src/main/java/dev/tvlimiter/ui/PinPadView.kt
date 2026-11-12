@@ -81,12 +81,6 @@ class PinPadView(context: Context) : LinearLayout(context) {
         render()
     }
 
-    fun showMessage(message: String) {
-        state.reset()
-        feedback.text = message
-        render()
-    }
-
     /** Back clears a partial entry first. Returns false when there was nothing to clear. */
     fun handleBack(): Boolean {
         if (state.length == 0) return false
