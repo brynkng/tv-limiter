@@ -26,11 +26,9 @@ import dev.tvlimiter.ui.BlockActivity
 class TrackingService : Service() {
     private lateinit var thread: HandlerThread
     private lateinit var handler: Handler
-    private lateinit var exempt: ExemptPackages
     private val accountant = TickAccountant(INTERVAL_MILLIS)
     private var foreground: String? = null
     private var lastQueryEnd = 0L
-    private var lastBlock: Pair<String, Long>? = null
 
     private val tick = object : Runnable {
         override fun run() {
@@ -46,7 +44,6 @@ class TrackingService : Service() {
     override fun onCreate() {
         super.onCreate()
         startInForeground()
-        exempt = ExemptPackages(packageName, homePackages(packageManager))
         thread = HandlerThread("tracking").apply { start() }
         handler = Handler(thread.looper)
         handler.post(tick)
@@ -70,6 +67,8 @@ class TrackingService : Service() {
         lastQueryEnd = now
 
         val pkg = foreground
+        // Looked up each tick so switching the default launcher takes effect right away.
+        val exempt = ExemptPackages(packageName, homePackages(packageManager))
         val chargeable = pkg != null && !exempt.isExempt(pkg)
         val seconds = accountant.secondsToCharge(SystemClock.elapsedRealtime(), chargeable)
         if (pkg == null || !chargeable) return
@@ -81,10 +80,9 @@ class TrackingService : Service() {
     }
 
     private fun showBlock(pkg: String) {
-        val nowElapsed = SystemClock.elapsedRealtime()
-        val last = lastBlock
-        if (last != null && last.first == pkg && nowElapsed - last.second < RELAUNCH_GAP_MILLIS) return
-        lastBlock = pkg to nowElapsed
+        // Re-launch whenever the block screen isn't showing, so reopening the app is covered on
+        // the next tick. A launch that lands while it is already up is ignored by BlockActivity.
+        if (BlockActivity.visible) return
         startActivity(BlockActivity.intent(this, pkg))
     }
 
@@ -126,7 +124,6 @@ class TrackingService : Service() {
         private const val INTERVAL_MILLIS = 2_000L
         private const val FIRST_LOOKBACK_MILLIS = 6 * 60 * 60 * 1000L
         private const val OVERLAP_MILLIS = 1_000L
-        private const val RELAUNCH_GAP_MILLIS = 5_000L
         private const val TAG = "TrackingService"
         private const val CHANNEL_ID = "tracking"
         private const val NOTIFICATION_ID = 1
@@ -140,10 +137,13 @@ class TrackingService : Service() {
             context.startForegroundService(Intent(context, TrackingService::class.java))
         }
 
-        fun homePackages(pm: PackageManager): Set<String> =
-            pm.queryIntentActivities(
-                Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME),
-                PackageManager.MATCH_DEFAULT_ONLY,
-            ).let { resolvers -> ExemptPackages.launchers(resolvers.map { it.activityInfo.packageName to it.priority }) }
+        fun homePackages(pm: PackageManager): Set<String> {
+            val home = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
+            val default = pm.resolveActivity(home, PackageManager.MATCH_DEFAULT_ONLY)?.activityInfo?.packageName
+            return ExemptPackages.homes(default) {
+                pm.queryIntentActivities(home, PackageManager.MATCH_DEFAULT_ONLY)
+                    .map { it.activityInfo.packageName to it.priority }
+            }
+        }
     }
 }

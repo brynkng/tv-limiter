@@ -36,5 +36,15 @@ class ExemptPackages(private val ownPackage: String, private val homePackages: S
          */
         fun launchers(resolvers: List<Pair<String, Int>>): Set<String> =
             resolvers.filter { it.second >= 0 }.map { it.first }.toSet()
+
+        /**
+         * Only the home app actually in use is exempt, so another app that merely declares a home
+         * screen can't dodge the limits. When no default is chosen the system answers with its
+         * chooser (package "android"), and every real launcher stays exempt so Home still works.
+         */
+        fun homes(defaultHome: String?, resolvers: () -> List<Pair<String, Int>>): Set<String> =
+            if (defaultHome != null && defaultHome != CHOOSER_PACKAGE) setOf(defaultHome) else launchers(resolvers())
+
+        private const val CHOOSER_PACKAGE = "android"
     }
 }

@@ -41,11 +41,19 @@ class BlockActivity : Activity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        // The service may ask again for the same app before this screen is up; keep any PIN entry in progress.
+        if (::blockedPackage.isInitialized && intent.getStringExtra(EXTRA_PACKAGE) == blockedPackage) return
         start(intent)
+    }
+
+    override fun onStart() {
+        super.onStart()
+        visible = true
     }
 
     override fun onStop() {
         super.onStop()
+        visible = false
         // Pressing Home leaves the app behind; the next attempt to open it blocks again.
         if (!isChangingConfigurations) finish()
     }
@@ -165,6 +173,10 @@ class BlockActivity : Activity() {
 
     companion object {
         private const val EXTRA_PACKAGE = "package"
+
+        /** Whether the block screen is on screen now; read by the tracking service thread. */
+        @Volatile var visible = false
+            private set
 
         fun intent(context: Context, packageName: String): Intent =
             Intent(context, BlockActivity::class.java)
