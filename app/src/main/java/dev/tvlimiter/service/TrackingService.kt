@@ -138,6 +138,6 @@ class TrackingService : Service() {
             pm.queryIntentActivities(
                 Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME),
                 PackageManager.MATCH_DEFAULT_ONLY,
-            ).map { it.activityInfo.packageName }.toSet()
+            ).let { resolvers -> ExemptPackages.launchers(resolvers.map { it.activityInfo.packageName to it.priority }) }
     }
 }

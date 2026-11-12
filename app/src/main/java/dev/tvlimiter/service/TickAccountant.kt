@@ -27,4 +27,14 @@ class TickAccountant(private val intervalMillis: Long) {
 /** Packages that never count and never get blocked: this app and the home launchers. */
 class ExemptPackages(private val ownPackage: String, private val homePackages: Set<String>) {
     fun isExempt(packageName: String): Boolean = packageName == ownPackage || packageName in homePackages
+
+    companion object {
+        /**
+         * Picks the real launchers from the home intent's resolvers, given as package and
+         * priority. The system Settings app also answers the home intent with a negative-priority
+         * fallback screen used during boot, and must not be exempted along with the launcher.
+         */
+        fun launchers(resolvers: List<Pair<String, Int>>): Set<String> =
+            resolvers.filter { it.second >= 0 }.map { it.first }.toSet()
+    }
 }
