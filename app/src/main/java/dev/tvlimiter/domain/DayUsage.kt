@@ -17,6 +17,16 @@ data class DayUsage(
         is LimitScope.App -> secondsFor(scope.packageName)
         LimitScope.WholeTv -> tvSeconds
     }
+
+    /** What the owner added to a limit today, such as "+45 min", or null when nothing was added. */
+    fun addedTime(limitId: String): String? {
+        val minutes = grantMinutesByLimitId[limitId] ?: 0
+        return when {
+            limitId in restOfDayLimitIds -> "the rest of today"
+            minutes > 0 -> "+$minutes min"
+            else -> null
+        }
+    }
 }
 
 /** The override amounts the owner can pick from after entering the PIN. */

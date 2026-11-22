@@ -47,7 +47,7 @@ class BlockViewModelTest {
         assertEquals("YouTube is done for today", model().headline)
         usage = DayUsage(date = day.toString())
         use(10, 170)
-        assertEquals("TV time is used up", model().headline)
+        assertEquals("TV time is done for today", model().headline)
     }
 
     @Test
@@ -92,7 +92,7 @@ class BlockViewModelTest {
         model.submitPin("2468")
         model.grant(GrantChoice.PLUS_30)
         assertEquals(BlockStep.GRANT, model.step)
-        assertEquals("TV time is used up", model.headline)
+        assertEquals("TV time is done for today", model.headline)
         model.grant(GrantChoice.PLUS_30)
         assertEquals(listOf(appLimit.id to GrantChoice.PLUS_30, tvLimit.id to GrantChoice.PLUS_30), grants)
         assertEquals(BlockStep.DONE, model.step)
@@ -107,7 +107,7 @@ class BlockViewModelTest {
         val check = model.submitPin("2468")
         assertTrue(check is PinCheck.LockedOut)
         assertEquals("Try again in 60s", pinFeedback(check))
-        assertEquals("Wrong PIN, 1 try left", pinFeedback(PinCheck.Wrong(1)))
+        assertEquals("Wrong passkey, 1 try left", pinFeedback(PinCheck.Wrong(1)))
         assertEquals(BlockStep.PIN, model.step)
     }
 

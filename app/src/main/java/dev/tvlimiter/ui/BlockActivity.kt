@@ -19,7 +19,7 @@ import dev.tvlimiter.domain.PinCheck
 
 /**
  * Covers an app whose time ran out. The viewer can only go home or hand the remote to the
- * owner for the PIN. Leaving this screen never resumes the blocked app.
+ * parent for the passkey. Leaving this screen never resumes the blocked app.
  */
 class BlockActivity : Activity() {
     private lateinit var model: BlockViewModel
@@ -93,12 +93,12 @@ class BlockActivity : Activity() {
         grantPanel.visibility = if (model.step == BlockStep.GRANT) View.VISIBLE else View.GONE
         when (model.step) {
             BlockStep.CHOOSE -> {
-                subline.text = "Ask the owner for more time, or go home."
+                subline.text = "Time for something else. If you need more, ask a parent."
                 homeButton.requestFocus()
             }
-            BlockStep.PIN -> subline.text = "Owner: enter the PIN where the viewer can't see the screen."
+            BlockStep.PIN -> subline.text = "Parent: enter your passkey."
             BlockStep.GRANT -> {
-                subline.text = "Extra time applies to today only."
+                subline.text = "Extra time is for today only."
                 grantTitle.text = "Add time to ${model.limitName}"
                 grantChoices.getChildAt(0)?.requestFocus()
             }
@@ -107,14 +107,16 @@ class BlockActivity : Activity() {
     }
 
     private fun buildViews() {
-        headline = label("", sizeSp = 40f, bold = true).apply { gravity = Gravity.CENTER }
+        headline = label("", sizeSp = 42f, bold = true).apply { gravity = Gravity.CENTER }
         subline = label("", sizeSp = 20f, colorId = R.color.muted).apply { gravity = Gravity.CENTER }
+        // An empty pink bar: the same bar the parent sees on the home screen, run out.
+        val spent = TimeBar(this).apply { exhausted = true }
 
         choosePanel = row().apply { gravity = Gravity.CENTER }
         homeButton = tvButton("Go home") { goHome() }
-        choosePanel.addView(homeButton.margins(this, end = 16))
+        choosePanel.addView(homeButton.margins(this, end = 20))
         choosePanel.addView(
-            tvButton("Enter PIN") {
+            tvButton("Ask a parent") {
                 model.requestPin()
                 render()
                 pad.open()
@@ -123,38 +125,49 @@ class BlockActivity : Activity() {
 
         pad = PinPadView(this)
         pad.bind(lockoutSeconds = { PinRepository.guard(this).lockoutSecondsLeft() }) { pin ->
-            val check = model.submitPin(pin)
-            if (check == PinCheck.Ok) render() else pad.showResult(check)
+            val check = model.checkPin(pin)
+            val show = {
+                model.applyCheck(check)
+                if (check == PinCheck.Ok) render() else pad.showResult(check)
+            }
+            show
         }
 
-        grantTitle = label("", sizeSp = 22f, bold = true).apply { gravity = Gravity.CENTER }
-        val choices = row().apply { gravity = Gravity.CENTER }
+        grantTitle = label("", sizeSp = 24f, weight = Weight.MEDIUM).apply { gravity = Gravity.CENTER }
+        val choices = row().apply {
+            gravity = Gravity.CENTER
+            clipChildren = false
+        }
         grantChoices = choices
         GrantChoice.entries.forEach { choice ->
             choices.addView(
                 tvButton(choice.label) {
                     model.grant(choice)
                     render()
-                }.margins(this, end = 12),
+                }.margins(this, end = 16),
             )
         }
         grantPanel = column(Gravity.CENTER_HORIZONTAL).apply {
+            clipChildren = false
             addView(grantTitle)
-            addView(choices.also { it.margins(this@BlockActivity, top = 16) })
+            addView(choices.also { it.margins(this@BlockActivity, top = 20) })
         }
 
         val content = column(Gravity.CENTER_HORIZONTAL).apply {
-            setPadding(dp(48), dp(48), dp(48), dp(48))
-            addView(headline)
-            addView(subline.also { it.margins(this@BlockActivity, top = 12) })
-            addView(choosePanel.also { it.margins(this@BlockActivity, top = 40) })
-            addView(pad.also { it.margins(this@BlockActivity, top = 40) })
-            addView(grantPanel.also { it.margins(this@BlockActivity, top = 40) })
+            setPadding(dp(64), dp(48), dp(64), dp(48))
+            clipChildren = false
+            addView(headline, LinearLayout.LayoutParams(-1, -2))
+            addView(spent, LinearLayout.LayoutParams(dp(420), dp(12)).apply { topMargin = dp(28) })
+            addView(subline, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(28) })
+            addView(choosePanel.also { it.margins(this@BlockActivity, top = 44) })
+            addView(pad.also { it.margins(this@BlockActivity, top = 44) })
+            addView(grantPanel.also { it.margins(this@BlockActivity, top = 44) })
         }
         setContentView(
             FrameLayout(this).apply {
                 setBackgroundColor(color(R.color.bg))
-                addView(content, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
+                clipChildren = false
+                addView(content, FrameLayout.LayoutParams(-1, -2, Gravity.CENTER))
             },
         )
     }

@@ -38,7 +38,7 @@ class BlockViewModel(
     val headline: String
         get() = when (val limit = firing) {
             null -> ""
-            else -> if (limit.isWholeTv) "TV time is used up" else "${appLabel(blockedPackage)} is done for today"
+            else -> if (limit.isWholeTv) "TV time is done for today" else "${appLabel(blockedPackage)} is done for today"
         }
 
     /** The limit's own name, used on the grant menu. */
@@ -53,10 +53,13 @@ class BlockViewModel(
         if (step == BlockStep.PIN) step = BlockStep.CHOOSE
     }
 
-    fun submitPin(pin: String): PinCheck {
-        val check = guard.check(pin)
+    fun submitPin(pin: String): PinCheck = checkPin(pin).also { applyCheck(it) }
+
+    /** The slow part, safe to run off the main thread: it only reads and writes the passkey file. */
+    fun checkPin(pin: String): PinCheck = guard.check(pin)
+
+    fun applyCheck(check: PinCheck) {
         if (check == PinCheck.Ok && step == BlockStep.PIN) step = BlockStep.GRANT
-        return check
     }
 
     fun grant(choice: GrantChoice) {

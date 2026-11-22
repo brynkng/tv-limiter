@@ -50,4 +50,14 @@ class ScheduleEditorStateTest {
         state.copySaturdayToWeekend()
         assertEquals(listOf(1, 2, 3, 4, 5, 240, 240), state.minutes)
     }
+
+    @Test
+    fun `copy Monday to every day sets all seven days, including no limit`() {
+        val state = editor(null, 10, 20, 30, 40, 50, 60)
+        state.copyMondayToAllDays()
+        assertEquals(List(7) { null }, state.minutes)
+        state.right(0)
+        state.copyMondayToAllDays()
+        assertEquals(List(7) { 15 }, state.minutes)
+    }
 }

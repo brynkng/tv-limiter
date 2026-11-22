@@ -39,4 +39,19 @@ class UsageLedgerTest {
         usage = UsageLedger.grant(usage, "app:a", GrantChoice.PLUS_30, day)
         assertEquals(45, usage.grantMinutesByLimitId["app:a"])
     }
+
+    @Test
+    fun `clearing grants takes back added minutes and rest of today for that limit only`() {
+        var usage = DayUsage(date = day.toString())
+        usage = UsageLedger.grant(usage, "app:a", GrantChoice.PLUS_30, day)
+        usage = UsageLedger.grant(usage, "app:a", GrantChoice.REST_OF_DAY, day)
+        usage = UsageLedger.grant(usage, "tv", GrantChoice.PLUS_15, day)
+        assertEquals("the rest of today", usage.addedTime("app:a"))
+
+        usage = UsageLedger.clearGrants(usage, "app:a", day)
+
+        assertEquals(null, usage.addedTime("app:a"))
+        assertTrue("app:a" !in usage.restOfDayLimitIds)
+        assertEquals("+15 min", usage.addedTime("tv"))
+    }
 }

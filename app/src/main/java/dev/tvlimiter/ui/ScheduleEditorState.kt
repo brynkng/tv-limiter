@@ -23,6 +23,10 @@ class ScheduleEditorState(minutesByDay: List<Int?>) {
         }
     }
 
+    fun copyMondayToAllDays() {
+        for (day in 1..6) days[day] = days[0]
+    }
+
     fun copyMondayToWeekdays() {
         for (day in 1..4) days[day] = days[0]
     }
@@ -37,7 +41,7 @@ class ScheduleEditorState(minutesByDay: List<Int?>) {
 
         fun describe(minutes: Int?): String = when (minutes) {
             null -> "No limit"
-            0 -> "0 min (blocked all day)"
+            0 -> "Blocked all day"
             else -> formatMinutes(minutes * 60L)
         }
     }

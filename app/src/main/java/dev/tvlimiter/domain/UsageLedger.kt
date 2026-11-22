@@ -25,4 +25,13 @@ object UsageLedger {
         val total = (current.grantMinutesByLimitId[limitId] ?: 0) + minutes
         return current.copy(grantMinutesByLimitId = current.grantMinutesByLimitId + (limitId to total))
     }
+
+    /** Takes back every grant made today for one limit, minutes and "rest of today" alike. */
+    fun clearGrants(usage: DayUsage, limitId: String, today: LocalDate): DayUsage {
+        val current = rollover(usage, today)
+        return current.copy(
+            grantMinutesByLimitId = current.grantMinutesByLimitId - limitId,
+            restOfDayLimitIds = current.restOfDayLimitIds - limitId,
+        )
+    }
 }

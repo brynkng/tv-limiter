@@ -1,9 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="bg">#FF101418</color>
-    <color name="panel">#FF1C232B</color>
-    <color name="accent">#FF4FC3F7</color>
-    <color name="text">#FFECEFF1</color>
-    <color name="muted">#FF90A4AE</color>
-    <color name="warn">#FFFFB74D</color>
+    <!-- Bedtime: soft plum with mint for time you still have, and pink for time that ran out. -->
+    <color name="bg">#FF1E1428</color>
+    <color name="panel">#FF2C1E3A</color>
+    <color name="panel_raised">#FF3D2A52</color>
+    <color name="track">#FF42305A</color>
+    <color name="accent">#FF8EE3C8</color>
+    <color name="on_accent">#FF1E1428</color>
+    <color name="text">#FFF6EEF8</color>
+    <color name="muted">#FFB9A6C9</color>
+    <color name="warn">#FFFF8FA3</color>
+    <!-- App colors on the report chart. Pink is left out so it only ever means time ran out. -->
+    <color name="chart_1">#FF8EE3C8</color>
+    <color name="chart_2">#FF93B4FF</color>
+    <color name="chart_3">#FFFFC890</color>
+    <color name="chart_4">#FFD8A8FF</color>
+    <color name="chart_other">#FF6E5A88</color>
 </resources>
