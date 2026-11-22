@@ -133,8 +133,17 @@ class TrackingService : Service() {
         private const val EVENT_RESUMED = 1
         private const val EVENT_PAUSED = 2
 
+        /**
+         * Starts tracking. Android can refuse when the app is in the background outside the
+         * cases it allows (a normal boot is allowed); then tracking starts the next time the
+         * settings open, instead of the app crashing.
+         */
         fun start(context: Context) {
-            context.startForegroundService(Intent(context, TrackingService::class.java))
+            try {
+                context.startForegroundService(Intent(context, TrackingService::class.java))
+            } catch (e: IllegalStateException) {
+                android.util.Log.w("TrackingService", "Android did not allow tracking to start now", e)
+            }
         }
 
         fun homePackages(pm: PackageManager): Set<String> {
