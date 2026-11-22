@@ -20,6 +20,7 @@ TV Limiter is free. If it helps your family, you can leave a tip on [Venmo (@bk.
 - **The tightest limit wins.** A minute in an app counts against that app's limit and against the TV limit. Whichever has less time left decides when to block.
 - **A block screen that says why.** It names the limit that ran out: "YouTube is done for today" or "TV time is done for today". From there the child can only go home or ask a parent for more time. Leaving the block screen never resumes the blocked app.
 - **Adding time.** After the passkey, the owner picks +15 min, +30 min, +60 min, or rest of today. The extra time goes only to the limit that ran out, and only for today.
+- **Parent mode.** After the passkey, the block screen also offers **Parent mode until the TV sleeps**. Nothing is counted or blocked until the screen turns off, so a parent can watch without using up the child's time. It can also be started or ended early from the home screen. It is kept only in memory, so restarting the app always ends it.
 - **Daily reset.** Usage and grants reset at local midnight, and each day uses that weekday's value.
 - **Survives reboots.** Tracking starts again after a reboot and keeps the time already used today.
 
