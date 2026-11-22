@@ -69,8 +69,12 @@ class PinGuard(
         val record = store.load() ?: return PinCheck.NoPin
         val fresh = if (record.lockStartedAt != null) record.copy(failures = 0, lockStartedAt = null) else record
         if (hasher.verify(pin, fresh)) {
-            // Only write when something changed, so a right PIN doesn't rewrite the file.
-            if (record.failures != 0 || record.lockStartedAt != null) store.save(fresh.copy(failures = 0, lockStartedAt = null))
+            when {
+                // A passkey saved with a different number of rounds is saved again with the current number.
+                fresh.iterations != hasher.iterations -> store.save(hasher.create(pin))
+                // Otherwise only write when something changed, so a right passkey doesn't rewrite the file.
+                record.failures != 0 || record.lockStartedAt != null -> store.save(fresh.copy(failures = 0, lockStartedAt = null))
+            }
             return PinCheck.Ok
         }
         val failures = fresh.failures + 1
@@ -86,7 +90,5 @@ class PinGuard(
     companion object {
         const val MAX_FAILURES = 5
         const val LOCKOUT_SECONDS = 60
-        const val MIN_LENGTH = 4
-        const val MAX_LENGTH = 8
     }
 }

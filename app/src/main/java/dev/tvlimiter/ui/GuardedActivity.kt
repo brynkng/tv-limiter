@@ -39,8 +39,11 @@ abstract class GuardedActivity : Activity() {
         if (resultCode != RESULT_OK) finish()
     }
 
-    /** The screen that unlocks settings. The main screen swaps in PIN setup when no PIN exists yet. */
-    protected open fun unlockIntent(): Intent = Intent(this, PinGateActivity::class.java)
+    /** The screen that unlocks settings. The main screen swaps in passkey setup when none exists yet. */
+    protected open fun unlockIntent(): Intent = skeleton.into(Intent(this, PinGateActivity::class.java))
+
+    /** The placeholder the passkey screen shows while this screen loads after a right passkey. */
+    protected open val skeleton: Skeleton = Skeleton.LIST
 
     /** Called on every resume once the owner has unlocked settings. */
     protected abstract fun onUnlockedResume()

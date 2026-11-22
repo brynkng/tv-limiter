@@ -22,6 +22,14 @@ class PinHasherTest {
 
     @Test
     fun `the default uses the full iteration count`() {
-        assertTrue(PinHasher().create("1234").iterations == 120_000)
+        assertTrue(PinHasher().create("1234").iterations == PinHasher.DEFAULT_ITERATIONS)
+    }
+
+    @Test
+    fun `the hash matches the platform PBKDF2, so saved passkeys still check out`() {
+        val salt = ByteArray(16) { it.toByte() }
+        val spec = javax.crypto.spec.PBEKeySpec("UUDDLR".toCharArray(), salt, 1_000, 256)
+        val expected = javax.crypto.SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(spec).encoded
+        assertTrue(expected.contentEquals(hasher.hash("UUDDLR", salt, 1_000)))
     }
 }

@@ -93,4 +93,14 @@ class PinGuardTest {
         now += 60_000
         assertEquals(PinCheck.Wrong(4), guard.check("0000"))
     }
+
+    @Test
+    fun `a passkey saved with other rounds is saved again with the current rounds after a right entry`() {
+        store.record = PinHasher(iterations = 2_000).create("UUDDLR")
+        val guard = guard()
+        assertEquals(PinCheck.Ok, guard.check("UUDDLR"))
+        assertEquals(1_000, store.record?.iterations)
+        assertEquals(PinCheck.Ok, guard.check("UUDDLR"))
+        assertEquals(PinCheck.Wrong(4), guard.check("UUUUUU"))
+    }
 }
