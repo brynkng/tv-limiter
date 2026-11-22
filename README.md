@@ -2,6 +2,17 @@
 
 An Android TV app that sets daily time limits for each app and for the TV as a whole. Each limit can have a different value for every day of the week. When time runs out, the app is covered by a block screen, and only someone who knows the passkey can add more time.
 
+TV Limiter is free and open source under the GPL-3.0 license. It has no internet permission, so nothing it records ever leaves the TV. See the [privacy policy](https://brynkng.github.io/tv-limiter/privacy).
+
+## Download
+
+- **Google Play:** coming soon.
+- **GitHub:** download `tv-limiter-<version>.apk` from the [latest release](https://github.com/brynkng/tv-limiter/releases/latest) and install it with `adb` as described under [Install on the TV](#install-on-the-tv).
+
+## Support
+
+TV Limiter is free. If it helps your family, you can leave a tip on [Venmo (@bk.ceramics)](https://venmo.com/u/bk.ceramics). The GitHub version of the app also has a **Support TV Limiter** button with a QR code. The Google Play version leaves it out, because Play only allows payments through its own billing.
+
 ## What it does
 
 - **App limits.** Pick any launchable app and give it a number of minutes for each weekday. Any day can be set to "no limit".
@@ -24,8 +35,24 @@ You need Android Studio's bundled JDK 21 (the system default Java may be older).
 
 ```sh
 export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
-./gradlew assembleDebug        # builds app/build/outputs/apk/debug/app-debug.apk
-./gradlew testDebugUnitTest    # runs the unit tests on your computer
+./gradlew assembleGithubDebug        # builds app/build/outputs/apk/github/debug/app-github-debug.apk
+./gradlew testGithubDebugUnitTest    # runs the unit tests on your computer
+```
+
+There are two versions of the app. `github` has the donation button and `play` does not; otherwise they are the same.
+
+To make signed release builds, create `keystore.properties` in the project folder (git ignores it):
+
+```properties
+storeFile=/absolute/path/to/upload-key.jks
+storePassword=...
+keyAlias=upload
+keyPassword=...
+```
+
+```sh
+./gradlew assembleGithubRelease   # signed APK for GitHub releases
+./gradlew bundlePlayRelease       # signed app bundle to upload to Google Play
 ```
 
 The first build downloads a few Gradle plugins, so it needs network access.
@@ -38,7 +65,7 @@ The first build downloads a few Gradle plugins, so it needs network access.
 
    ```sh
    adb connect <tv-ip>
-   adb install -r app/build/outputs/apk/debug/app-debug.apk
+   adb install -r tv-limiter-<version>.apk   # or app/build/outputs/apk/github/debug/app-github-debug.apk
    ```
 
    Accept the debugging prompt on the TV with the remote.
@@ -46,8 +73,8 @@ The first build downloads a few Gradle plugins, so it needs network access.
 4. Grant the two permissions the app needs. Some TVs hide these screens in Settings, so `adb` is the reliable way:
 
    ```sh
-   adb shell appops set dev.tvlimiter GET_USAGE_STATS allow
-   adb shell appops set dev.tvlimiter SYSTEM_ALERT_WINDOW allow
+   adb shell appops set io.github.brynkng.tvlimiter GET_USAGE_STATS allow
+   adb shell appops set io.github.brynkng.tvlimiter SYSTEM_ALERT_WINDOW allow
    ```
 
    Usage access lets the app see which app is in front. "Display over other apps" lets it bring up the block screen.
@@ -93,7 +120,7 @@ The passkey works like an Xbox passkey: it's 6 presses of the remote's arrow but
 There is no recovery code yet. Turn debugging back on, connect with `adb`, and run:
 
 ```sh
-adb shell pm clear dev.tvlimiter
+adb shell pm clear io.github.brynkng.tvlimiter
 ```
 
 This clears the passkey and all limits. Grant the two permissions again afterward, then set up a new passkey.
@@ -105,10 +132,16 @@ app/src/main/java/dev/tvlimiter/
   domain/   limits, weekday tables, the tightest-limit evaluation, usage counting, passkey hashing, passkey entry state
   data/     JSON files for limits, today's usage and the passkey, written atomically
   service/  the tracking service, foreground app detection, boot start
-  ui/       settings screens, the block screen, passkey entry
+  ui/       settings screens, the block screen, passkey entry, the screen time report
+app/src/github/  the donation screen, in the GitHub version only
+app/src/play/    an empty stand-in for it in the Google Play version
 app/src/test/java/dev/tvlimiter/  unit tests that run on your computer
-docs/       ideation and the implementation plan
+docs/       privacy policy (served by GitHub Pages), Play Store listing, ideation and the implementation plan
 ```
+
+## License
+
+TV Limiter is licensed under the [GNU General Public License v3.0](LICENSE). You can use, study, change and share it; if you publish a changed version, it must use the same license and include its source.
 
 ## Fonts
 
