@@ -142,6 +142,7 @@ internal class UsageChart(context: Context) : View(context) {
     private fun axisLabel(minutes: Int): String = when {
         minutes == 0 -> "0"
         minutes % 60 == 0 -> "${minutes / 60} h"
+        minutes > 60 -> "${minutes / 60} h ${minutes % 60}"
         else -> "$minutes m"
     }
 
