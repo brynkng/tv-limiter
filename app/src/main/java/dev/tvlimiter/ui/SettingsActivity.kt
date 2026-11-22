@@ -58,6 +58,7 @@ class SettingsActivity : GuardedActivity() {
         content.addView(buttons.margins(this, top = 24))
         passkeyRow()
         permissions()
+        Donate.addTo(this, content)
         first?.requestFocus()
     }
 
