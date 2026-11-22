@@ -22,6 +22,7 @@ class BlockViewModelTest {
     private val guard = PinGuard(InMemoryPinStore(), PinHasher(iterations = 1_000)) { 0L }.apply { setPin("2468") }
     private var usage = DayUsage(date = day.toString())
     private val grants = mutableListOf<Pair<String, GrantChoice>>()
+    private var parentModeStarted = false
 
     private fun model(limits: List<Limit> = listOf(tvLimit, appLimit)) = BlockViewModel(
         blockedPackage = youtube,
@@ -34,6 +35,7 @@ class BlockViewModelTest {
         },
         guard = guard,
         appLabel = { "YouTube" },
+        startParentMode = { parentModeStarted = true },
     )
 
     private fun use(minutesOnYoutube: Long, otherMinutes: Long = 0) {
@@ -124,5 +126,21 @@ class BlockViewModelTest {
     fun `nothing ran out means there is nothing to block`() {
         use(10)
         assertEquals(BlockStep.DONE, model().step)
+    }
+
+    @Test
+    fun `parent mode needs the passkey, then lets the app resume without a grant`() {
+        use(minutesOnYoutube = 60)
+        val m = model()
+        m.parentMode()
+        assertEquals(false, parentModeStarted)
+
+        m.requestPin()
+        m.submitPin("2468")
+        m.parentMode()
+
+        assertTrue(parentModeStarted)
+        assertEquals(BlockStep.DONE, m.step)
+        assertEquals(emptyList<Pair<String, GrantChoice>>(), grants)
     }
 }
