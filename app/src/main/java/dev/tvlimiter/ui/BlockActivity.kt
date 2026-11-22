@@ -15,6 +15,7 @@ import dev.tvlimiter.data.LimitsRepository
 import dev.tvlimiter.data.PinRepository
 import dev.tvlimiter.data.UsageRepository
 import dev.tvlimiter.domain.GrantChoice
+import dev.tvlimiter.domain.ParentMode
 import dev.tvlimiter.domain.PinCheck
 
 /**
@@ -81,6 +82,7 @@ class BlockActivity : Activity() {
             recordGrant = usage::grant,
             guard = PinRepository.guard(this),
             appLabel = { appLabel(packageManager, it) },
+            startParentMode = ParentMode.shared::start,
         )
         render()
     }
@@ -147,10 +149,16 @@ class BlockActivity : Activity() {
                 }.margins(this, end = 16),
             )
         }
+        // On its own line: it isn't more time for this limit but no limits at all until the TV sleeps.
+        val parentMode = tvButton("Parent mode until the TV sleeps") {
+            model.parentMode()
+            render()
+        }
         grantPanel = column(Gravity.CENTER_HORIZONTAL).apply {
             clipChildren = false
             addView(grantTitle)
             addView(choices.also { it.margins(this@BlockActivity, top = 20) })
+            addView(parentMode.margins(this@BlockActivity, top = 16))
         }
 
         val content = column(Gravity.CENTER_HORIZONTAL).apply {

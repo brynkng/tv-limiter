@@ -8,6 +8,7 @@ import android.view.View
 import android.widget.LinearLayout
 import android.widget.Toast
 import dev.tvlimiter.R
+import dev.tvlimiter.domain.ParentMode
 import dev.tvlimiter.data.LimitsRepository
 import dev.tvlimiter.data.PinRepository
 import dev.tvlimiter.data.UsageRepository
@@ -56,6 +57,7 @@ class SettingsActivity : GuardedActivity() {
         buttons.addView(tvButton("Add an app") { startActivity(Intent(this, AppPickerActivity::class.java)) }.margins(this, end = 12))
         buttons.addView(tvButton("See screen time history") { startActivity(Intent(this, ReportActivity::class.java)) })
         content.addView(buttons.margins(this, top = 24))
+        parentModeRow()
         passkeyRow()
         permissions()
         Donate.addTo(this, content)
@@ -79,6 +81,29 @@ class SettingsActivity : GuardedActivity() {
         }
         row.addView(status, LinearLayout.LayoutParams(dp(300), -2))
         return row
+    }
+
+    /** Parent mode can also start here, and this is where a parent ends it early. */
+    private fun parentModeRow() {
+        val on = ParentMode.shared.active
+        val row = row()
+        val text = column()
+        text.addView(label(if (on) "Parent mode is on" else "Parent mode", sizeSp = 20f, weight = Weight.MEDIUM, colorId = if (on) R.color.accent else R.color.text))
+        text.addView(
+            label(
+                if (on) "Nothing is counted or blocked until the TV goes to sleep." else "Turn off every limit until the TV goes to sleep.",
+                sizeSp = 15f,
+                colorId = R.color.muted,
+            ),
+        )
+        row.addView(text, LinearLayout.LayoutParams(0, -2, 1f))
+        row.addView(
+            tvButton(if (on) "Turn off parent mode" else "Start parent mode") {
+                if (on) ParentMode.shared.end() else ParentMode.shared.start()
+                render()
+            },
+        )
+        content.addView(row.fullWidth(this, top = 40))
     }
 
     private fun passkeyRow() {

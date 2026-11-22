@@ -24,6 +24,7 @@ class BlockViewModel(
     private val recordGrant: (limitId: String, choice: GrantChoice) -> Unit,
     private val guard: PinGuard,
     private val appLabel: (packageName: String) -> String,
+    private val startParentMode: () -> Unit = {},
 ) {
     var firing: Limit? = null
         private set
@@ -68,6 +69,13 @@ class BlockViewModel(
         recordGrant(limit.id, choice)
         refresh()
         step = if (firing == null) BlockStep.DONE else BlockStep.GRANT
+    }
+
+    /** Lifts every limit until the TV sleeps, after the passkey, and lets the app resume. */
+    fun parentMode() {
+        if (step != BlockStep.GRANT) return
+        startParentMode()
+        step = BlockStep.DONE
     }
 
     private fun refresh() {

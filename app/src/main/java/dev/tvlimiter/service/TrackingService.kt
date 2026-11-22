@@ -6,20 +6,24 @@ import android.app.NotificationManager
 import android.app.Service
 import android.app.usage.UsageEvents
 import android.app.usage.UsageStatsManager
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.IBinder
+import android.os.PowerManager
 import android.os.SystemClock
 import android.util.Log
 import dev.tvlimiter.R
 import dev.tvlimiter.data.LimitsRepository
 import dev.tvlimiter.data.UsageRepository
 import dev.tvlimiter.domain.LimitEvaluator
+import dev.tvlimiter.domain.ParentMode
 import dev.tvlimiter.ui.BlockActivity
 
 /** Polls usage events, charges foreground time, and covers an app with the block screen when it runs out. */
@@ -29,6 +33,13 @@ class TrackingService : Service() {
     private val accountant = TickAccountant(INTERVAL_MILLIS)
     private var foreground: String? = null
     private var lastQueryEnd = 0L
+
+    /** Parent mode ends when the TV goes to sleep or turns off. */
+    private val screenOff = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action == Intent.ACTION_SCREEN_OFF) ParentMode.shared.end()
+        }
+    }
 
     private val tick = object : Runnable {
         override fun run() {
@@ -47,11 +58,18 @@ class TrackingService : Service() {
         thread = HandlerThread("tracking").apply { start() }
         handler = Handler(thread.looper)
         handler.post(tick)
+        val filter = IntentFilter(Intent.ACTION_SCREEN_OFF)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(screenOff, filter, RECEIVER_NOT_EXPORTED)
+        } else {
+            registerReceiver(screenOff, filter)
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_STICKY
 
     override fun onDestroy() {
+        unregisterReceiver(screenOff)
         handler.removeCallbacksAndMessages(null)
         thread.quitSafely()
         super.onDestroy()
@@ -69,7 +87,10 @@ class TrackingService : Service() {
         val pkg = foreground
         // Looked up each tick so switching the default launcher takes effect right away.
         val exempt = ExemptPackages(packageName, homePackages(packageManager))
-        val chargeable = pkg != null && !exempt.isExempt(pkg)
+        // A second check on top of the screen-off broadcast, in case that one was missed.
+        if (getSystemService(PowerManager::class.java)?.isInteractive == false) ParentMode.shared.end()
+        // In parent mode the parent's viewing neither counts nor blocks.
+        val chargeable = pkg != null && !exempt.isExempt(pkg) && !ParentMode.shared.active
         val seconds = accountant.secondsToCharge(SystemClock.elapsedRealtime(), chargeable)
         if (pkg == null || !chargeable) return
 
