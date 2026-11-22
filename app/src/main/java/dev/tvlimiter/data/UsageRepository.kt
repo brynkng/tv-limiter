@@ -17,6 +17,8 @@ import java.time.LocalDate
 class UsageRepository(
     private val store: JsonFileStore<DayUsage>,
     private val clock: Clock,
+    /** Receives each finished day when a new one starts, for the report. */
+    private val archive: (DayUsage) -> Unit = {},
 ) {
     private val lock = Any()
     private var cached: DayUsage? = null
@@ -33,10 +35,19 @@ class UsageRepository(
         save(UsageLedger.grant(current(), limitId, choice, LocalDate.now(clock)))
     }
 
+    fun clearGrants(limitId: String) = synchronized(lock) {
+        save(UsageLedger.clearGrants(current(), limitId, LocalDate.now(clock)))
+    }
+
     private fun current(): DayUsage {
         val loaded = cached ?: store.read()
         val rolled = UsageLedger.rollover(loaded, LocalDate.now(clock))
-        if (rolled !== loaded) save(rolled) else cached = rolled
+        if (rolled !== loaded) {
+            if (loaded.date.isNotEmpty()) archive(loaded)
+            save(rolled)
+        } else {
+            cached = rolled
+        }
         return rolled
     }
 
@@ -60,6 +71,7 @@ class UsageRepository(
                     DayUsage(date = "")
                 },
                 Clock.systemDefaultZone(),
+                HistoryRepository.get(context)::archive,
             ).also { instance = it }
         }
     }

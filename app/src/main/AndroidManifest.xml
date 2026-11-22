@@ -51,6 +51,7 @@
         <activity android:name=".ui.PinGateActivity" android:exported="false" />
         <activity android:name=".ui.AppPickerActivity" android:exported="false" />
         <activity android:name=".ui.ScheduleEditorActivity" android:exported="false" />
+        <activity android:name=".ui.ReportActivity" android:exported="false" />
 
         <activity
             android:name=".ui.BlockActivity"
