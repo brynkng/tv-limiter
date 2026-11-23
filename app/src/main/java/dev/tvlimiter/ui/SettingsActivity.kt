@@ -35,7 +35,7 @@ class SettingsActivity : GuardedActivity() {
 
     override fun onUnlockedResume() = render()
 
-    private fun render() {
+    private fun render(keepParentModeFocus: Boolean = false) {
         content.removeAllViews()
         val header = row()
         header.addView(label(getString(R.string.app_name), sizeSp = 34f, bold = true), LinearLayout.LayoutParams(0, -2, 1f))
@@ -57,11 +57,11 @@ class SettingsActivity : GuardedActivity() {
         buttons.addView(tvButton("Add an app") { startActivity(Intent(this, AppPickerActivity::class.java)) }.margins(this, end = 12))
         buttons.addView(tvButton("See screen time history") { startActivity(Intent(this, ReportActivity::class.java)) })
         content.addView(buttons.margins(this, top = 24))
-        parentModeRow()
+        val parentModeButton = parentModeRow()
         passkeyRow()
         permissions()
         Donate.addTo(this, content)
-        first?.requestFocus()
+        (if (keepParentModeFocus) parentModeButton else first)?.requestFocus()
     }
 
     private fun limitRow(limit: Limit, summary: LimitSummary): View {
@@ -84,7 +84,7 @@ class SettingsActivity : GuardedActivity() {
     }
 
     /** Parent mode can also start here, and this is where a parent ends it early. */
-    private fun parentModeRow() {
+    private fun parentModeRow(): View {
         val on = ParentMode.shared.active
         val row = row()
         val text = column()
@@ -97,13 +97,13 @@ class SettingsActivity : GuardedActivity() {
             ),
         )
         row.addView(text, LinearLayout.LayoutParams(0, -2, 1f))
-        row.addView(
-            tvButton(if (on) "Turn off parent mode" else "Start parent mode") {
-                if (on) ParentMode.shared.end() else ParentMode.shared.start()
-                render()
-            },
-        )
+        val button = tvButton(if (on) "Turn off parent mode" else "Start parent mode") {
+            if (on) ParentMode.shared.end() else ParentMode.shared.start()
+            render(keepParentModeFocus = true)
+        }
+        row.addView(button)
         content.addView(row.fullWidth(this, top = 40))
+        return button
     }
 
     private fun passkeyRow() {
