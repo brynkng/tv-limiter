@@ -40,7 +40,7 @@ When asked about app signing, accept Play App Signing. The key in `keystore.prop
 > When time runs out, your child can ask you for more. Enter the passkey to add 15, 30 or 60 minutes, or the rest of the day. You can take added time back later.
 >
 > PARENT MODE
-> Want to watch something yourself? After the passkey, choose parent mode: nothing is counted or blocked until the TV goes to sleep, so your viewing never uses up your child's time.
+> Want to watch something yourself? After the passkey, choose parent mode: nothing is counted or blocked until the screensaver starts or the TV goes to sleep, so your viewing never uses up your child's time.
 >
 > SEE WHERE THE TIME GOES
 > The screen time report charts TV time by day, week or month, split by app, with the most used apps for each period.
