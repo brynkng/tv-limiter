@@ -1,7 +1,7 @@
 package dev.tvlimiter.domain
 
 /**
- * Parent mode: nothing is counted or blocked until the TV goes to sleep. It lives only in
+ * Parent mode: nothing is counted or blocked until the screensaver starts or the TV goes to sleep. It lives only in
  * memory, so a restart of the app always ends it rather than leaving the TV unlimited.
  */
 class ParentMode {

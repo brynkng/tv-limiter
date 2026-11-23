@@ -91,7 +91,7 @@ class SettingsActivity : GuardedActivity() {
         text.addView(label(if (on) "Parent mode is on" else "Parent mode", sizeSp = 20f, weight = Weight.MEDIUM, colorId = if (on) R.color.accent else R.color.text))
         text.addView(
             label(
-                if (on) "Nothing is counted or blocked until the TV goes to sleep." else "Turn off every limit until the TV goes to sleep.",
+                if (on) "Nothing is counted or blocked until the screensaver starts or the TV goes to sleep." else "Turn off every limit until the screensaver starts or the TV goes to sleep.",
                 sizeSp = 15f,
                 colorId = R.color.muted,
             ),

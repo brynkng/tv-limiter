@@ -34,10 +34,9 @@ class TrackingService : Service() {
     private var foreground: String? = null
     private var lastQueryEnd = 0L
 
-    /** Parent mode ends when the TV goes to sleep or turns off. */
     private val screenOff = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
-            if (intent.action == Intent.ACTION_SCREEN_OFF) ParentMode.shared.end()
+            if (intent.action == Intent.ACTION_SCREEN_OFF || intent.action == Intent.ACTION_DREAMING_STARTED) ParentMode.shared.end()
         }
     }
 
@@ -58,7 +57,7 @@ class TrackingService : Service() {
         thread = HandlerThread("tracking").apply { start() }
         handler = Handler(thread.looper)
         handler.post(tick)
-        val filter = IntentFilter(Intent.ACTION_SCREEN_OFF)
+        val filter = IntentFilter(Intent.ACTION_SCREEN_OFF).apply { addAction(Intent.ACTION_DREAMING_STARTED) }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(screenOff, filter, RECEIVER_NOT_EXPORTED)
         } else {
