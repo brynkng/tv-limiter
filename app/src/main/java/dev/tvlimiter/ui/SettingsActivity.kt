@@ -13,6 +13,7 @@ import dev.tvlimiter.data.LimitsRepository
 import dev.tvlimiter.data.PinRepository
 import dev.tvlimiter.data.UsageRepository
 import dev.tvlimiter.domain.Limit
+import dev.tvlimiter.domain.NotificationAccessGuide
 import dev.tvlimiter.service.TrackingService
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -60,6 +61,7 @@ class SettingsActivity : GuardedActivity() {
         val parentModeButton = parentModeRow()
         passkeyRow()
         permissions()
+        notificationAccess()
         Donate.addTo(this, content)
         (if (keepParentModeFocus) parentModeButton else first)?.requestFocus()
     }
@@ -164,6 +166,40 @@ class SettingsActivity : GuardedActivity() {
             ).margins(this, top = 16),
         )
         content.addView(card.fullWidth(this, top = 40))
+    }
+
+    /**
+     * YouTube detection needs notification access. Only builds with the detection listener
+     * show this. Limits work without it, so it is a separate card from the required ones.
+     */
+    private fun notificationAccess() {
+        if (!PermissionStatus.hasNotificationListener(this)) return
+        if (PermissionStatus.hasNotificationAccess(this)) {
+            content.addView(label("YouTube video titles are being recorded.", sizeSp = 15f, colorId = R.color.muted).margins(this, top = 12))
+            return
+        }
+        val card = column().apply {
+            // An outline, so the panel colored button stands out inside it.
+            background = rounded(R.color.bg, radiusDp = 16, strokeColorId = R.color.panel_raised)
+            setPadding(dp(28), dp(20), dp(28), dp(24))
+        }
+        card.addView(label("Notification access", sizeSp = 20f, weight = Weight.MEDIUM))
+        card.addView(label("Lets TV Limiter see which YouTube video is playing.", sizeSp = 15f, colorId = R.color.muted))
+        when (val guide = PermissionStatus.notificationAccessGuide(this)) {
+            NotificationAccessGuide.OnePress -> {
+                card.addView(label("Press Allow, then switch on TV Limiter.", sizeSp = 15f).margins(this, top = 12))
+                card.addView(tvButton("Allow") { openSystemScreen(PermissionStatus.notificationAccessScreen()) }.margins(this, top = 12))
+            }
+            is NotificationAccessGuide.Steps -> {
+                card.addView(label("This TV can't open that screen directly. Press Open settings, then:", sizeSp = 15f).margins(this, top = 12))
+                guide.steps.forEachIndexed { i, step -> card.addView(label("${i + 1}. $step", sizeSp = 15f).margins(this, top = 4)) }
+                card.addView(tvButton("Open settings") { openSystemScreen(PermissionStatus.appsScreen()) }.margins(this, top = 12))
+            }
+            is NotificationAccessGuide.Unsupported -> {
+                card.addView(label("${guide.reason} TV Limiter can't see YouTube videos on this TV. Time limits still work.", sizeSp = 15f).margins(this, top = 12))
+            }
+        }
+        content.addView(card.fullWidth(this, top = 24))
     }
 
     private fun permissionRow(card: LinearLayout, name: String, why: String, screen: Intent, adb: String) {
