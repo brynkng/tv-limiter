@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Debug builds only: the YouTube detection recorder. Release builds have no
+     notification listener. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <queries>
+        <package android:name="com.google.android.youtube" />
+        <package android:name="com.google.android.youtube.tv" />
+        <package android:name="com.amazon.firetv.youtube" />
+        <package android:name="com.android.chrome" />
+    </queries>
+
+    <application>
+        <!-- Repeats the main manifest's value. Without it, lint reads only this file
+             for TrackingService and reports a missing foregroundServiceType. -->
+        <service
+            android:name="dev.tvlimiter.service.TrackingService"
+            android:foregroundServiceType="specialUse" />
+
+        <service
+            android:name="dev.tvlimiter.detection.DetectionListener"
+            android:exported="true"
+            android:label="TV Limiter YouTube detection"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+    </application>
+</manifest>
