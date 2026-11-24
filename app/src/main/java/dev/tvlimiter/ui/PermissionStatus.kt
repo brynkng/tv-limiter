@@ -10,8 +10,8 @@ import android.provider.Settings
 
 /** Whether the two permissions the limiter depends on are granted, and how to grant them. */
 object PermissionStatus {
-    const val USAGE_ADB = "adb shell appops set dev.tvlimiter GET_USAGE_STATS allow"
-    const val OVERLAY_ADB = "adb shell appops set dev.tvlimiter SYSTEM_ALERT_WINDOW allow"
+    fun usageAdb(context: Context) = "adb shell appops set ${context.packageName} GET_USAGE_STATS allow"
+    fun overlayAdb(context: Context) = "adb shell appops set ${context.packageName} SYSTEM_ALERT_WINDOW allow"
 
     fun hasUsageAccess(context: Context): Boolean {
         val appOps = context.getSystemService(AppOpsManager::class.java) ?: return false

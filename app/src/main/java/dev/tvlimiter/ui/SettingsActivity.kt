@@ -145,7 +145,7 @@ class SettingsActivity : GuardedActivity() {
         }
         card.addView(label("Your child's limits can't work until these are allowed", sizeSp = 20f, weight = Weight.MEDIUM, colorId = R.color.warn))
         if (!usage) {
-            permissionRow(card, "Usage access", "Lets TV Limiter see which app is open.", PermissionStatus.usageAccessScreen(), PermissionStatus.USAGE_ADB)
+            permissionRow(card, "Usage access", "Lets TV Limiter see which app is open.", PermissionStatus.usageAccessScreen(), PermissionStatus.usageAdb(this))
         }
         if (!overlay) {
             permissionRow(
@@ -153,7 +153,7 @@ class SettingsActivity : GuardedActivity() {
                 "Display over other apps",
                 "Lets TV Limiter cover an app when its time is up.",
                 PermissionStatus.overlayScreen(this),
-                PermissionStatus.OVERLAY_ADB,
+                PermissionStatus.overlayAdb(this),
             )
         }
         card.addView(
