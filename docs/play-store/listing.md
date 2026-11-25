@@ -88,7 +88,7 @@ When asked about app signing, accept Play App Signing. The key in `keystore.prop
 - Is all of the user data encrypted in transit? Not applicable; nothing is transmitted.
 - Do you provide a way for users to request that their data is deleted? Users delete it by uninstalling the app or clearing its storage.
 
-**When a build with TubeGuard ships (not yet):** the answers above stop being true for that build. Before uploading it, update the description's "no internet permission" line and the data safety form: the app then collects app activity (YouTube titles and channels watched, with times) and device identifiers it is paired with, sends them to TubeGuard over HTTPS, uses them for app functionality (parental controls), and deletes them on request through the TubeGuard parent app. Declare the monitoring tool (`isMonitoringTool` child_monitoring) in the Play Console's monitoring declaration.
+**When a build with TubeGuard ships (not yet):** the answers above stop being true for that build. Before uploading it, update the description's "no internet permission" line and the data safety form: the app then collects app activity (YouTube titles and channels watched, with times and which parts of each video were played) and device identifiers it is paired with, sends them to TubeGuard over HTTPS, uses them for app functionality (parental controls), and deletes them on request through the TubeGuard parent app. Declare the monitoring tool (`isMonitoringTool` child_monitoring) in the Play Console's monitoring declaration.
 
 **Government app / financial features / health:** No.
 
