@@ -8,10 +8,14 @@ import android.media.session.MediaSessionManager
 import android.media.session.PlaybackState
 import android.os.Build
 import android.os.Bundle
-import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
+import dev.tvlimiter.service.WatchListener
 
-class DetectionListener : NotificationListenerService() {
+/**
+ * Logs everything YouTube tells Android while a video plays. It extends the real listener, so a debug build
+ * reports to TubeGuard too, and it keeps this class name so the access granted to it stays granted.
+ */
+class DetectionListener : WatchListener() {
     private val callbacks = HashMap<String, Pair<MediaController, MediaController.Callback>>()
 
     private val sessionsChanged = MediaSessionManager.OnActiveSessionsChangedListener { controllers ->
@@ -19,6 +23,7 @@ class DetectionListener : NotificationListenerService() {
     }
 
     override fun onListenerConnected() {
+        super.onListenerConnected()
         EventLog.write(
             this, "listener_connected",
             listOf(
@@ -47,6 +52,7 @@ class DetectionListener : NotificationListenerService() {
         }
         callbacks.values.forEach { (c, cb) -> c.unregisterCallback(cb) }
         callbacks.clear()
+        super.onListenerDisconnected()
     }
 
     private fun attach(controllers: List<MediaController>) {

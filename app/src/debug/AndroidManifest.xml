@@ -1,7 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Debug builds only: the YouTube detection recorder. Release builds have no
-     notification listener. -->
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<!-- Debug builds only: the YouTube detection recorder, and cleartext traffic so the app can reach a
+     TubeGuard backend running on the host computer. DetectionListener extends the main WatchListener, and
+     it replaces it here so the TV has one notification listener and keeps the access already granted to it. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- So the ongoing "monitored by TubeGuard" notice can be shown on Android 13 and newer. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Jobs that wait for a connection need this. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
     <queries>
         <package android:name="com.google.android.youtube" />
@@ -10,7 +18,9 @@
         <package android:name="com.android.chrome" />
     </queries>
 
-    <application>
+    <application android:usesCleartextTraffic="true">
+        <service android:name="dev.tvlimiter.service.WatchListener" tools:node="remove" />
+
         <!-- Repeats the main manifest's value. Without it, lint reads only this file
              for TrackingService and reports a missing foregroundServiceType. -->
         <service

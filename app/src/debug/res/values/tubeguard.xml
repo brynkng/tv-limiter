@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The class that holds the notification access grant. Debug builds keep the recorder's name, so the
+         access already granted to it keeps working. -->
+    <string name="tubeguard_listener_class" translatable="false">dev.tvlimiter.detection.DetectionListener</string>
+</resources>
