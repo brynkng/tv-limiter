@@ -14,6 +14,9 @@ class InMemoryPinStore : PinStore {
         saves++
     }
     override fun isDamaged() = damaged
+    override fun clear() {
+        record = null
+    }
 }
 
 class PinGuardTest {
@@ -102,5 +105,13 @@ class PinGuardTest {
         assertEquals(1_000, store.record?.iterations)
         assertEquals(PinCheck.Ok, guard.check("UUDDLR"))
         assertEquals(PinCheck.Wrong(4), guard.check("UUUUUU"))
+    }
+
+    @Test
+    fun `clearing the PIN leaves none set`() {
+        val guard = guard().apply { setPin("1234") }
+        guard.clearPin()
+        assertEquals(false, guard.hasPin())
+        assertEquals(PinCheck.NoPin, guard.check("1234"))
     }
 }
