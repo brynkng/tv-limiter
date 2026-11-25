@@ -149,6 +149,7 @@ object TubeGuard {
             allowances = Allowances.shared,
             parentMode = { ParentMode.shared.active },
             shortsBlocked = { shortsBlocked(app) },
+            clockMs = SystemClock::elapsedRealtime,
             source = { id -> fetchOutcome(app, id) },
             actions = AndroidBlockActions(app),
         ).also { blockerInstance = it }

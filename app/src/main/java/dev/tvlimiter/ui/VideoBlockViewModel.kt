@@ -45,12 +45,16 @@ enum class ApproveResult { Recorded, Banned, Unreachable }
  * a video that stopped being blocked while the screen was up (a parent approved it or lifted a ban).
  */
 class VideoBlockViewModel(
-    val video: BlockedVideo,
+    video: BlockedVideo,
     private val guard: PinGuard,
     private val allowVideo: () -> Unit,
     private val allowChannel: () -> Unit,
     private val startParentMode: () -> Unit,
 ) {
+    /** The video being covered, with the reason TubeGuard last gave for it. */
+    var video: BlockedVideo = video
+        private set
+
     var step: VideoStep = VideoStep.CHOOSE
         private set
 
@@ -104,7 +108,10 @@ class VideoBlockViewModel(
     fun pollResult(fetched: Fetch) {
         if (step != VideoStep.CHOOSE && step != VideoStep.ASKED && step != VideoStep.DENIED) return
         val outcome = (fetched as? Fetch.Got)?.outcome ?: return
-        if (!outcome.decided) return
+        // TubeGuard no longer has a decided answer that blocks this video (for example it is being checked again
+        // after a ban was removed): the block was made on old news, so it is lifted rather than held.
+        if (!outcome.decided) return resume()
+        if (outcome.isOver) video = video.copy(kind = outcome.kind ?: video.kind, value = outcome.value, level = outcome.level, ageBand = outcome.ageBand)
         when {
             // Approved, a ban removed, or limits changed: it is not over a limit any more.
             !outcome.isOver -> resume()

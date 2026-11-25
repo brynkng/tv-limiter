@@ -40,6 +40,9 @@ fun interface OutcomeSource {
  * - A watch whose outcome is not decided yet is asked about every [POLL_EVERY_MS] for up to [POLL_FOR_MS], then left alone.
  * - A video found fine is asked about again every [RECHECK_EVERY_MS] while it is still the one on screen, so a
  *   ban or a stricter setting made while it plays stops it then.
+ * - A block shown from the cache is asked about again, since TubeGuard's answer may have changed (a ban was removed, a
+ *   limit was loosened): a decided answer that is still over updates the cache and the screen, and one that is not
+ *   over, or is no longer decided, forgets the cached block so it cannot hold a video blocked on old news.
  * - A parent's allowance (this video, or this channel, until the TV sleeps) lifts a block.
  * - A Short (no title) is blocked at once, from the Shorts setting the TV already knows ([shortsBlocked]), once the
  *   tracker has found it to be one ([noteShort]); a replay of that Short is covered again at once.
@@ -57,8 +60,11 @@ class VideoBlocker(
     private val recheckEveryMs: Long = RECHECK_EVERY_MS,
     /** Whether Shorts are blocked for whoever is watching now. Read each time, so a setting TubeGuard just sent counts. */
     private val shortsBlocked: () -> Boolean = { false },
+    /** The clock [onPlaying] uses to start asking about a video it blocked from the cache. [poll] gets its own. */
+    private val clockMs: () -> Long = { System.nanoTime() / 1_000_000 },
 ) {
-    private class Pending(val key: VideoKey, val watchEventId: String, val startedMs: Long) {
+    /** [fromCache] is set for a video blocked from the cache, whose block is asked about again in case it no longer holds. */
+    private class Pending(val key: VideoKey, val watchEventId: String, val startedMs: Long, val fromCache: Boolean = false) {
         var lastAskedMs: Long? = null
     }
 
@@ -85,6 +91,7 @@ class VideoBlocker(
         if (parentMode() || allowances.allows(key)) return
         val hit = cache.find(key) ?: return
         block(key, hit.overKind, hit.value, hit.level, hit.watchEventId, hit.ageBand)
+        verifyCached(key, hit.watchEventId)
     }
 
     /** The tracker found [key] to be a Short: untitled for long enough that it is not a regular video loading. */
@@ -106,6 +113,15 @@ class VideoBlocker(
         block(key, OverKind.SHORTS_BLOCKED, null, null, null, null)
     }
 
+    /** Asks TubeGuard whether a block shown from the cache still holds. Once per video while it is being asked about. */
+    private fun verifyCached(key: VideoKey, watchEventId: String?) {
+        if (watchEventId == null) return
+        synchronized(lock) {
+            if (pending.any { it.key.sameVideo(key) }) return
+            pending += Pending(key, watchEventId, clockMs(), fromCache = true)
+        }
+    }
+
     /** A report was taken. [outcome] is what the reply carried, null when the video is not decided yet. */
     fun onReported(key: VideoKey, watchEventId: String?, outcome: WatchOutcome?, nowMs: Long) {
         if (outcome != null && outcome.decided) return decided(key, watchEventId, outcome, nowMs)
@@ -125,6 +141,12 @@ class VideoBlocker(
         for (watch in due) {
             val fetched = source.fetch(watch.watchEventId)
             if (fetched is Fetch.Gone) synchronized(lock) { pending.remove(watch) }
+            if (fetched is Fetch.Got && !fetched.outcome.decided && watch.fromCache) {
+                // TubeGuard no longer has an answer that blocks it. A cached block is not kept on old news.
+                cache.remove(watch.key)
+                synchronized(lock) { pending.remove(watch) }
+                continue
+            }
             if (fetched !is Fetch.Got || !fetched.outcome.decided) continue
             synchronized(lock) { pending.remove(watch) }
             decided(watch.key, watch.watchEventId, fetched.outcome, nowMs)
@@ -196,7 +218,9 @@ class VideoBlocker(
         // A screen already up for another video is told about this one.
         // So is one that has only now learned TubeGuard's id for the watch (a Short blocked before the report was answered).
         val learnedId = covered?.watchEventId == null && watchEventId != null
-        if (!actions.isShowing() || covered?.key?.sameVideo(key) != true || learnedId) actions.show(video)
+        // And so is one whose reason changed (a ban was removed and the category it is over now decides).
+        val reasonChanged = covered != null && covered.key.sameVideo(key) && covered.reason != video.reason
+        if (!actions.isShowing() || covered?.key?.sameVideo(key) != true || learnedId || reasonChanged) actions.show(video)
     }
 
     companion object {

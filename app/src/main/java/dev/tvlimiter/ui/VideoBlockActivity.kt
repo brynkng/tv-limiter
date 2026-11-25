@@ -69,7 +69,7 @@ class VideoBlockActivity : Activity() {
         setIntent(intent)
         // The listener may ask again for the video already covered; keep any passkey entry in progress.
         val now = TubeGuard.blocker(this).blocked ?: return
-        if (::model.isInitialized && now.key.sameVideo(model.video.key) && now.watchEventId == model.video.watchEventId) return
+        if (::model.isInitialized && now.key.sameVideo(model.video.key) && now.watchEventId == model.video.watchEventId && now.reason == model.video.reason) return
         start()
     }
 
