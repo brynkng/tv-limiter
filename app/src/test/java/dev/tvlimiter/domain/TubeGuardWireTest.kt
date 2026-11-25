@@ -26,6 +26,26 @@ class TubeGuardWireTest {
     }
 
     @Test
+    fun `a report carries what was played as pairs of seconds, and none when the session gave no position`() {
+        val withSpans = obj(TubeGuardWire.reportBody(report.copy(spans = listOf(Span(120, 126), Span(300, 310))), Moment(70_000, 5_060_000), currentBootCount = 7))
+        assertEquals("[[120,126],[300,310]]", withSpans["spans"].toString())
+        assertFalse(obj(TubeGuardWire.reportBody(report, Moment(70_000, 5_060_000), currentBootCount = 7)).containsKey("spans"))
+    }
+
+    @Test
+    fun `a spans update carries every span, goes to the watch's own path, and is keyed like its report`() {
+        assertEquals("""{"spans":[[0,70],[900,940]]}""", TubeGuardWire.spansBody(listOf(Span(0, 70), Span(900, 940))))
+        assertEquals("/api/device/watches/abc%2F1/spans", TubeGuardWire.spansPath("abc/1"))
+        assertEquals(report.key, TubeGuardWire.watchKey(7, 10_000))
+    }
+
+    @Test
+    fun `a queued watch keeps its spans`() {
+        val watch = Watch("A title", "A channel", 213, Moment(10_000, 5_000_000), spans = listOf(Span(5, 12)))
+        assertEquals(listOf(Span(5, 12)), TubeGuardWire.queued(watch, bootCount = 7).spans)
+    }
+
+    @Test
     fun `a report carries the linked child's id, and none when the profile has no link`() {
         val linked = obj(TubeGuardWire.reportBody(report.copy(childId = "c1"), Moment(70_000, 5_060_000), currentBootCount = 7))
         assertEquals("c1", linked["childId"]!!.jsonPrimitive.content)
