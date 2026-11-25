@@ -30,6 +30,7 @@ import dev.tvlimiter.domain.ParentMode
 import dev.tvlimiter.domain.Viewer
 import dev.tvlimiter.domain.ViewerGate
 import dev.tvlimiter.ui.BlockActivity
+import dev.tvlimiter.ui.PermissionStatus
 import dev.tvlimiter.ui.WhoActivity
 
 /**
@@ -74,7 +75,9 @@ class TrackingService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        running = this
         startInForeground()
+        TubeGuard.schedule(this)
         thread = HandlerThread("tracking").apply { start() }
         handler = Handler(thread.looper)
         handler.post(tick)
@@ -93,6 +96,7 @@ class TrackingService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_STICKY
 
     override fun onDestroy() {
+        running = null
         unregisterReceiver(screenChanges)
         handler.removeCallbacksAndMessages(null)
         thread.quitSafely()
@@ -172,11 +176,7 @@ class TrackingService : Service() {
         manager.createNotificationChannel(
             NotificationChannel(CHANNEL_ID, getString(R.string.tracking_channel), NotificationManager.IMPORTANCE_LOW),
         )
-        val notification = Notification.Builder(this, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_stat_timer)
-            .setContentTitle(getString(R.string.tracking_notification))
-            .setOngoing(true)
-            .build()
+        val notification = buildNotification(this)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
         } else {
@@ -185,6 +185,31 @@ class TrackingService : Service() {
     }
 
     companion object {
+        /**
+         * The ongoing notification. While this TV is paired with TubeGuard and notification access is on, it also says
+         * the TV is monitored by the family's parent app, as Google Play's rules for monitoring apps ask.
+         */
+        private fun buildNotification(context: Context): Notification {
+            val builder = Notification.Builder(context, CHANNEL_ID)
+                .setSmallIcon(R.drawable.ic_stat_timer)
+                .setContentTitle(context.getString(R.string.tracking_notification))
+                .setOngoing(true)
+            if (TubeGuard.isConnected(context) && PermissionStatus.hasNotificationAccess(context)) {
+                builder.setContentText(context.getString(R.string.monitored_notification))
+            }
+            return builder.build()
+        }
+
+        @Volatile private var running: TrackingService? = null
+
+        /**
+         * Updates the notification's text after pairing, disconnecting, or notification access changing. It starts
+         * the foreground notification again rather than posting a new one, so it needs no notification permission.
+         */
+        fun refreshNotice(context: Context) {
+            running?.startInForeground()
+        }
+
         private const val INTERVAL_MILLIS = 2_000L
         private const val FIRST_LOOKBACK_MILLIS = 6 * 60 * 60 * 1000L
         private const val OVERLAP_MILLIS = 1_000L

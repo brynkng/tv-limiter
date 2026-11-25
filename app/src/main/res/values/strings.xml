@@ -3,4 +3,6 @@
     <string name="app_name">TV Limiter</string>
     <string name="tracking_channel">Screen time tracking</string>
     <string name="tracking_notification">TV Limiter is counting screen time</string>
+    <string name="monitored_notification">Monitored by your family\'s TubeGuard parent app</string>
+    <string name="tubeguard_listener_class" translatable="false">dev.tvlimiter.service.WatchListener</string>
 </resources>

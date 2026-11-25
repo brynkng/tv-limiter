@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Added to a release build only when it is built with a TubeGuard address (-PtubeguardUrl=...). A build
+     without one has no internet permission. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- So the ongoing "monitored by TubeGuard" notice can be shown on Android 13 and newer. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Jobs that wait for a connection need this. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+</manifest>

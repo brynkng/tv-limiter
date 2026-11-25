@@ -57,6 +57,7 @@
         <activity android:name=".ui.ScheduleEditorActivity" android:exported="false" />
         <activity android:name=".ui.ReportActivity" android:exported="false" />
         <activity android:name=".ui.ProfileEditorActivity" android:exported="false" />
+        <activity android:name=".ui.TubeGuardActivity" android:enabled="${tubeguardEnabled}" android:exported="false" />
 
         <activity
             android:name=".ui.BlockActivity"
@@ -80,6 +81,26 @@
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Counts foreground app time to enforce daily screen time limits set by the device owner" />
         </service>
+
+        <!-- Follows YouTube's media session for TubeGuard. Switched off in a build with no TubeGuard address, so
+             that build has no notification listener at all. Debug builds replace it with DetectionListener,
+             which extends it. -->
+        <service
+            android:name=".service.WatchListener"
+            android:enabled="${tubeguardEnabled}"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+
+        <service
+            android:name=".service.TubeGuardJobService"
+            android:enabled="${tubeguardEnabled}"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
 
         <receiver
             android:name=".service.BootReceiver"
