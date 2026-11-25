@@ -2,7 +2,7 @@ package dev.tvlimiter.domain
 
 /** What the tracking service does with the app in front, on each tick. */
 sealed interface Gate {
-    /** Profiles mode and nobody picked yet: cover the app with the picker and count nothing. */
+    /** Nobody picked who is watching yet: cover the app with the picker and count nothing. */
     data object ShowPicker : Gate
 
     /** Parent mode: nothing counts and nothing blocks. */
@@ -13,11 +13,12 @@ sealed interface Gate {
 }
 
 object ViewerGate {
-    fun decide(mode: Mode, viewer: String?, parentMode: Boolean, profileIds: Collection<String>): Gate = when {
+    fun decide(viewer: String?, parentMode: Boolean, profiles: List<Profile>, hasPasskey: (String) -> Boolean): Gate = when {
         parentMode -> Gate.CountNothing
-        mode == Mode.SHARED -> Gate.CountFor(Profiles.SHARED_ID)
         // A viewer whose profile was deleted meanwhile has to pick again.
-        viewer != null && viewer in profileIds -> Gate.CountFor(viewer)
+        viewer != null && profiles.any { it.id == viewer } -> Gate.CountFor(viewer)
+        // One profile with no passkey to enter: the TV just uses it.
+        !Profiles.needsPicker(profiles, hasPasskey) -> Gate.CountFor(profiles.single().id)
         else -> Gate.ShowPicker
     }
 }

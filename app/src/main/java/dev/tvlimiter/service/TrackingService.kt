@@ -21,6 +21,7 @@ import android.os.SystemClock
 import android.util.Log
 import dev.tvlimiter.R
 import dev.tvlimiter.data.LimitsRepository
+import dev.tvlimiter.data.PinRepository
 import dev.tvlimiter.data.ProfilesRepository
 import dev.tvlimiter.data.UsageRepository
 import dev.tvlimiter.domain.Gate
@@ -33,8 +34,9 @@ import dev.tvlimiter.ui.WhoActivity
 
 /**
  * Polls usage events, charges foreground time, and covers an app with the block screen when it
- * runs out. In profiles mode the time goes to whoever picked on the "Who's watching" screen,
- * and an app opened before anyone picked is covered by that screen.
+ * runs out. The time goes to whoever picked on the "Who's watching" screen, and an app opened
+ * before anyone picked is covered by that screen. A TV with one profile and no passkey on it
+ * never shows that screen.
  */
 class TrackingService : Service() {
     private lateinit var thread: HandlerThread
@@ -50,7 +52,7 @@ class TrackingService : Service() {
                     ParentMode.shared.end()
                     Viewer.shared.end()
                 }
-                // Waking up, or the screensaver ending, asks who is watching in profiles mode.
+                // Waking up, or the screensaver ending, asks who is watching.
                 Intent.ACTION_SCREEN_ON, Intent.ACTION_DREAMING_STOPPED -> {
                     if (getSystemService(PowerManager::class.java)?.isInteractive == false) return
                     if (gate() == Gate.ShowPicker) showPicker(null)
@@ -131,8 +133,8 @@ class TrackingService : Service() {
     }
 
     private fun gate(): Gate {
-        val profiles = ProfilesRepository.get(this).current()
-        return ViewerGate.decide(profiles.mode, Viewer.shared.current, ParentMode.shared.active, profiles.profiles.map { it.id })
+        val profiles = ProfilesRepository.get(this).profiles()
+        return ViewerGate.decide(Viewer.shared.current, ParentMode.shared.active, profiles) { PinRepository.guard(this, it).hasPin() }
     }
 
     private fun showBlock(pkg: String, profileId: String) {

@@ -11,4 +11,4 @@ internal fun Intent.withProfile(profileId: String): Intent = putExtra(EXTRA_PROF
 
 /** The profile this screen is for; the shared profile when none was given. */
 internal val Activity.profileId: String
-    get() = intent.getStringExtra(EXTRA_PROFILE_ID) ?: Profiles.SHARED_ID
+    get() = intent.getStringExtra(EXTRA_PROFILE_ID) ?: Profiles.DEFAULT_ID

@@ -66,7 +66,7 @@ class UsageRepository(
         private val instances = mutableMapOf<String, UsageRepository>()
 
         /** Today's usage for [profileId]; the shared profile is today's usage.json. */
-        fun get(context: Context, profileId: String = Profiles.SHARED_ID): UsageRepository = synchronized(instances) {
+        fun get(context: Context, profileId: String = Profiles.DEFAULT_ID): UsageRepository = synchronized(instances) {
             instances.getOrPut(profileId) {
                 val file = Profiles.dataFile(context.applicationContext.filesDir, profileId, "usage.json")
                 UsageRepository(

@@ -3,7 +3,6 @@ package dev.tvlimiter.data
 import android.content.Context
 import dev.tvlimiter.domain.AgeBand
 import dev.tvlimiter.domain.Limit
-import dev.tvlimiter.domain.Mode
 import dev.tvlimiter.domain.Profile
 import dev.tvlimiter.domain.Profiles
 import dev.tvlimiter.domain.ProfilesFile
@@ -11,22 +10,18 @@ import dev.tvlimiter.domain.Viewer
 import java.io.File
 
 /**
- * The mode and the list of child profiles, in profiles.json. A TV without the file is in
- * shared mode with no profiles, which is how every install before profiles behaves.
+ * The list of profiles, in profiles.json. A TV without the file has only the default
+ * profile, whose files are the ones every install before profiles already had.
  */
 class ProfilesRepository(private val store: JsonFileStore<ProfilesFile>) {
     private val lock = Any()
     private var cached: ProfilesFile? = null
 
-    fun current(): ProfilesFile = synchronized(lock) { cached ?: store.read().also { cached = it } }
-
-    fun mode(): Mode = current().mode
+    fun current(): ProfilesFile = synchronized(lock) { cached ?: store.read().withDefault().also { cached = it } }
 
     fun profiles(): List<Profile> = current().profiles
 
     fun find(id: String): Profile? = current().find(id)
-
-    fun setMode(mode: Mode) = synchronized(lock) { save(current().copy(mode = mode)) }
 
     fun upsert(profile: Profile) = synchronized(lock) { save(current().withProfile(profile)) }
 
@@ -48,7 +43,7 @@ class ProfilesRepository(private val store: JsonFileStore<ProfilesFile>) {
             ).also { instance = it }
         }
 
-        /** Adds a child profile whose limits start as a copy of the shared limits. */
+        /** Adds a profile whose limits start as a copy of the default profile's. */
         fun add(context: Context, name: String, band: AgeBand): Profile {
             val repo = get(context)
             val profile = Profile(Profiles.newId(repo.profiles().map { it.id }.toSet()), name, band)
@@ -58,9 +53,9 @@ class ProfilesRepository(private val store: JsonFileStore<ProfilesFile>) {
             return profile
         }
 
-        /** Deletes a child profile with its limits, usage, history and passkey. */
+        /** Deletes a profile with its limits, usage, history and passkey. The default profile stays. */
         fun delete(context: Context, id: String) {
-            if (id == Profiles.SHARED_ID) return
+            if (id == Profiles.DEFAULT_ID) return
             // Stop counting for this profile first, so the tracking service doesn't write its files again.
             if (Viewer.shared.current == id) Viewer.shared.end()
             get(context).remove(id)

@@ -57,7 +57,7 @@ class LimitsRepository(private val store: JsonFileStore<LimitsFile>) {
         private val instances = mutableMapOf<String, LimitsRepository>()
 
         /** The limits of [profileId]; the shared profile is today's limits.json. */
-        fun get(context: Context, profileId: String = Profiles.SHARED_ID): LimitsRepository = synchronized(instances) {
+        fun get(context: Context, profileId: String = Profiles.DEFAULT_ID): LimitsRepository = synchronized(instances) {
             instances.getOrPut(profileId) {
                 val file = Profiles.dataFile(context.applicationContext.filesDir, profileId, "limits.json")
                 LimitsRepository(JsonFileStore(file, LimitsFile.serializer()) { LimitsFile() })

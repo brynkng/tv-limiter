@@ -27,7 +27,7 @@ class HistoryRepository(private val store: JsonFileStore<UsageHistory>) {
         private val instances = mutableMapOf<String, HistoryRepository>()
 
         /** The history of [profileId]; the shared profile is today's history.json. */
-        fun get(context: Context, profileId: String = Profiles.SHARED_ID): HistoryRepository = synchronized(instances) {
+        fun get(context: Context, profileId: String = Profiles.DEFAULT_ID): HistoryRepository = synchronized(instances) {
             instances.getOrPut(profileId) {
                 val file = Profiles.dataFile(context.applicationContext.filesDir, profileId, "history.json")
                 HistoryRepository(JsonFileStore(file, UsageHistory.serializer()) { UsageHistory() })

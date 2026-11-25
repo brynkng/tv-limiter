@@ -204,13 +204,13 @@ class BlockActivity : Activity() {
         @Volatile var visible = false
             private set
 
-        fun intent(context: Context, packageName: String, profileId: String = Profiles.SHARED_ID): Intent =
+        fun intent(context: Context, packageName: String, profileId: String = Profiles.DEFAULT_ID): Intent =
             Intent(context, BlockActivity::class.java)
                 .putExtra(EXTRA_PACKAGE, packageName)
                 .putExtra(EXTRA_PROFILE, profileId)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION)
 
-        private fun profileOf(intent: Intent): String = intent.getStringExtra(EXTRA_PROFILE) ?: Profiles.SHARED_ID
+        private fun profileOf(intent: Intent): String = intent.getStringExtra(EXTRA_PROFILE) ?: Profiles.DEFAULT_ID
 
         fun appLabel(pm: PackageManager, packageName: String): String = try {
             pm.getApplicationLabel(pm.getApplicationInfo(packageName, 0)).toString()

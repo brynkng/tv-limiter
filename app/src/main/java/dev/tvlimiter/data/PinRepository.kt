@@ -7,6 +7,7 @@ import dev.tvlimiter.domain.PinHasher
 import dev.tvlimiter.domain.PinRecord
 import dev.tvlimiter.domain.PinStore
 import dev.tvlimiter.domain.Profiles
+import java.io.File
 import java.io.IOException
 import kotlinx.serialization.Serializable
 
@@ -50,12 +51,13 @@ class PinRepository(private val store: JsonFileStore<PinFile>) : PinStore {
         private val guards = mutableMapOf<String, PinGuard>()
 
         /**
-         * The passkey check for [profileId]. The shared profile's is the parent passkey in
-         * pin.json; each child's sits in that child's folder.
+         * The passkey check for [profileId], or the parent passkey (pin.json) when it is null.
+         * Each profile's passkey is a separate file, see [Profiles.passkeyFile].
          */
-        fun guard(context: Context, profileId: String = Profiles.SHARED_ID): PinGuard = synchronized(guards) {
-            guards.getOrPut(profileId) {
-                val file = Profiles.dataFile(context.applicationContext.filesDir, profileId, "pin.json")
+        fun guard(context: Context, profileId: String? = null): PinGuard = synchronized(guards) {
+            guards.getOrPut(profileId ?: PARENT) {
+                val dir = context.applicationContext.filesDir
+                val file = if (profileId == null) File(dir, "pin.json") else Profiles.passkeyFile(dir, profileId)
                 PinGuard(
                     PinRepository(JsonFileStore(file, PinFile.serializer()) { PinFile() }),
                     PinHasher(),
@@ -63,6 +65,8 @@ class PinRepository(private val store: JsonFileStore<PinFile>) : PinStore {
                 )
             }
         }
+
+        private const val PARENT = "parent"
 
         fun forget(profileId: String) = synchronized(guards) { guards.remove(profileId) }
     }

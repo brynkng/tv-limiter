@@ -19,6 +19,7 @@ import dev.tvlimiter.data.PinRepository
 import dev.tvlimiter.data.ProfilesRepository
 import dev.tvlimiter.domain.AgeBand
 import dev.tvlimiter.domain.Profile
+import dev.tvlimiter.domain.Profiles
 
 /**
  * Adds or edits one child's profile: the name, the age group, the passkey, and deleting it.
@@ -98,7 +99,10 @@ class ProfileEditorActivity : GuardedActivity() {
         }
 
         passkeyRow(profile)
-        content.addView(tvButton("Delete this profile") { askDelete() }.apply { tag = TAG_DELETE }.margins(this, top = 36))
+        // The default profile holds the TV's original limits and history, so every TV keeps at least it.
+        if (profile.id != Profiles.DEFAULT_ID) {
+            content.addView(tvButton("Delete this profile") { askDelete() }.apply { tag = TAG_DELETE }.margins(this, top = 36))
+        }
         (focusTag?.let { content.findViewWithTag<View>(it) } ?: bands.getChildAt(draftBand.ordinal)).requestFocus()
     }
 
@@ -202,7 +206,7 @@ class ProfileEditorActivity : GuardedActivity() {
     private fun confirmDelete(profile: Profile) {
         content.addView(label("Delete ${profile.name}?", sizeSp = 34f, bold = true))
         content.addView(
-            label("${profile.name}'s limits, screen time history and passkey will be deleted too.", sizeSp = 18f, colorId = R.color.muted)
+            label("${profile.possessive} limits, screen time history and passkey will be deleted too.", sizeSp = 18f, colorId = R.color.muted)
                 .margins(this, top = 12),
         )
         val buttons = row().apply { clipChildren = false }

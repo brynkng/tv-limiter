@@ -26,8 +26,8 @@ class PinSetupActivity : TrackedActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val profileId = intent.getStringExtra(EXTRA_PROFILE) ?: Profiles.SHARED_ID
-        childName = intent.getStringExtra(EXTRA_NAME).takeIf { profileId != Profiles.SHARED_ID }
+        val profileId = intent.getStringExtra(EXTRA_PROFILE)
+        childName = intent.getStringExtra(EXTRA_NAME).takeIf { profileId != null }
         val guard = PinRepository.guard(this, profileId)
         changing = childName == null && intent.getBooleanExtra(EXTRA_CHANGE, false)
         step = if (changing) Step.CURRENT else Step.NEW
