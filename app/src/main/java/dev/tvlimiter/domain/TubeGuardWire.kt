@@ -21,6 +21,8 @@ data class QueuedReport(
     val startWallMs: Long,
     /** Settings.Global.BOOT_COUNT when the video was watched. Elapsed time starts again at every boot. */
     val bootCount: Int,
+    /** The TubeGuard child linked to the profile that was active when the watch started, or null. */
+    val childId: String? = null,
     /** True when this changes the length of a watch already reported, so the backend corrects it instead of adding one. */
     val correction: Boolean = false,
 ) {
@@ -34,7 +36,7 @@ data class SentReport(val key: String, val watchEventId: String)
 
 /** What the TubeGuard backend sends back for a pairing request. */
 sealed interface PairResult {
-    data class Paired(val deviceId: String, val deviceToken: String, val children: List<String>) : PairResult {
+    data class Paired(val deviceId: String, val deviceToken: String, val children: List<TubeGuardChild>) : PairResult {
         override fun toString() = "Paired(children=${children.size})"
     }
 
@@ -134,6 +136,7 @@ object TubeGuardWire {
             put("currentBootCount", currentBootCount)
             report.durationSec?.let { put("durationSec", it) }
             replaces?.let { put("replaces", it) }
+            report.childId?.let { put("childId", it) }
         }.toString()
     }
 
@@ -144,13 +147,14 @@ object TubeGuardWire {
         null
     }
 
-    fun queued(watch: Watch, bootCount: Int) = QueuedReport(
+    fun queued(watch: Watch, bootCount: Int, childId: String? = null) = QueuedReport(
         title = watch.title,
         channel = watch.channel.ifBlank { UNKNOWN_CHANNEL },
         durationSec = watch.durationSec,
         startElapsedMs = watch.start.elapsedMs,
         startWallMs = watch.start.wallMs,
         bootCount = bootCount,
+        childId = childId,
         correction = watch.correction,
     )
 
@@ -172,16 +176,28 @@ object TubeGuardWire {
         null
     }
 
+    /** The children a check-in reply lists, or null when the reply doesn't list any (an older backend), so the TV keeps what it has. */
+    fun children(body: String): List<TubeGuardChild>? = try {
+        childrenIn(Json.parseToJsonElement(body).jsonObject)
+    } catch (e: Exception) {
+        null
+    }
+
+    private fun childrenIn(root: JsonObject): List<TubeGuardChild>? = (root["children"] as? JsonArray)?.mapNotNull {
+        val child = it as? JsonObject ?: return@mapNotNull null
+        val id = child["id"]?.jsonPrimitive?.contentOrNull?.takeIf { v -> v.isNotEmpty() } ?: return@mapNotNull null
+        val name = child["name"]?.jsonPrimitive?.contentOrNull.orEmpty()
+        TubeGuardChild(id, name)
+    }
+
     private fun parsePaired(body: String): PairResult.Paired? = try {
         val root = Json.parseToJsonElement(body).jsonObject
         val token = root["deviceToken"]?.jsonPrimitive?.contentOrNull
         val id = root["deviceId"]?.jsonPrimitive?.contentOrNull
-        val children = (root["children"] as? JsonArray).orEmpty()
-            .mapNotNull { (it as? JsonObject)?.get("name")?.jsonPrimitive?.contentOrNull }
+        val children = childrenIn(root) ?: emptyList()
         if (token.isNullOrEmpty() || id.isNullOrEmpty()) null else PairResult.Paired(id, token, children)
     } catch (e: Exception) {
         null
     }
 
-    private fun JsonArray?.orEmpty(): List<kotlinx.serialization.json.JsonElement> = this ?: emptyList()
 }

@@ -12,6 +12,7 @@ import dev.tvlimiter.BuildConfig
 import dev.tvlimiter.data.BlockCacheRepository
 import dev.tvlimiter.data.FlushResult
 import dev.tvlimiter.data.HttpTransport
+import dev.tvlimiter.data.ProfilesRepository
 import dev.tvlimiter.data.ReportQueueRepository
 import dev.tvlimiter.data.ReportUploader
 import dev.tvlimiter.data.TubeGuardLinkRepository
@@ -23,6 +24,8 @@ import dev.tvlimiter.domain.Moment
 import dev.tvlimiter.domain.OutcomeWire
 import dev.tvlimiter.domain.ParentMode
 import dev.tvlimiter.domain.PairResult
+import dev.tvlimiter.domain.ProfileLinks
+import dev.tvlimiter.domain.TubeGuardChild
 import dev.tvlimiter.domain.TubeGuardWire
 import dev.tvlimiter.domain.UploadOutcome
 import dev.tvlimiter.domain.VideoBlocker
@@ -67,9 +70,19 @@ object TubeGuard {
         if (!isConnected(context)) return
         val app = context.applicationContext
         worker.execute {
-            ReportQueueRepository.get(app).add(TubeGuardWire.queued(watch, bootCount(app)))
+            ReportQueueRepository.get(app).add(TubeGuardWire.queued(watch, bootCount(app), linkedChildId(app, watch.profileId)))
             flushNow(app)
         }
+    }
+
+    /** The TubeGuard child linked to the profile that was active when a watch started, or null. */
+    private fun linkedChildId(context: Context, profileId: String?): String? =
+        ProfileLinks.childIdFor(profileId, ProfilesRepository.get(context).profiles(), TubeGuardLinkRepository.get(context).current().childList)
+
+    /** Keeps the children TubeGuard listed and links the only profile to the only child. */
+    private fun childrenListed(context: Context, children: List<TubeGuardChild>) {
+        TubeGuardLinkRepository.get(context).updateChildren(children)
+        ProfilesRepository.get(context).autoLink(children)
     }
 
     /** Sends whatever is queued. Safe to call from any thread. */
@@ -201,11 +214,15 @@ object TubeGuard {
         if (!isConnected(context)) return true
         val token = TubeGuardLinkRepository.get(context).current().deviceToken
         val body = TubeGuardWire.heartbeatBody(PermissionStatus.hasNotificationAccess(context), BuildConfig.VERSION_NAME)
+        var children: List<TubeGuardChild>? = null
         val outcome = try {
-            UploadOutcome.of(transport.post(TubeGuardWire.HEARTBEAT, token, body).status)
+            val reply = transport.post(TubeGuardWire.HEARTBEAT, token, body)
+            if (reply.status in 200..299) children = TubeGuardWire.children(reply.body)
+            UploadOutcome.of(reply.status)
         } catch (e: IOException) {
             UploadOutcome.Retry
         }
+        children?.let { childrenListed(context, it) }
         when (outcome) {
             UploadOutcome.Disconnected -> removedByParent(context)
             UploadOutcome.Retry -> return false
@@ -234,6 +251,7 @@ object TubeGuard {
         // Reports queued under an earlier pairing belong to that family.
         ReportQueueRepository.get(app).clear()
         TubeGuardLinkRepository.get(app).connect(paired.deviceId, paired.deviceToken, paired.children)
+        ProfilesRepository.get(app).autoLink(paired.children)
         schedule(app)
         TrackingService.refreshNotice(app)
         worker.execute { heartbeatNow(app) }

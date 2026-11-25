@@ -4,6 +4,8 @@ import android.content.Context
 import dev.tvlimiter.domain.AgeBand
 import dev.tvlimiter.domain.Limit
 import dev.tvlimiter.domain.Profile
+import dev.tvlimiter.domain.ProfileLinks
+import dev.tvlimiter.domain.TubeGuardChild
 import dev.tvlimiter.domain.Profiles
 import dev.tvlimiter.domain.ProfilesFile
 import dev.tvlimiter.domain.Viewer
@@ -24,6 +26,13 @@ class ProfilesRepository(private val store: JsonFileStore<ProfilesFile>) {
     fun find(id: String): Profile? = current().find(id)
 
     fun upsert(profile: Profile) = synchronized(lock) { save(current().withProfile(profile)) }
+
+    /** Links the only profile to the TV's only TubeGuard child, when that applies. Returns true if it changed. */
+    fun autoLink(children: List<TubeGuardChild>): Boolean = synchronized(lock) {
+        val linked = ProfileLinks.autoLinked(current().profiles, children) ?: return@synchronized false
+        save(current().withProfile(linked))
+        true
+    }
 
     fun remove(id: String) = synchronized(lock) { save(current().without(id)) }
 

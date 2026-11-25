@@ -49,7 +49,7 @@ class PairingViewModel {
     fun finishCheck(result: PairResult) {
         if (status != Status.Checking) return
         status = when (result) {
-            is PairResult.Paired -> Status.Connected(result.children)
+            is PairResult.Paired -> Status.Connected(result.children.map { it.name })
             PairResult.InvalidCode -> Status.Problem("That code didn't work. Check the digits (Delete fixes one) and try again.")
             PairResult.CodeUsed -> newCodeNeeded("That code was already used to connect a TV.")
             PairResult.CodeExpired -> newCodeNeeded("That code has expired. Codes work for 15 minutes.")

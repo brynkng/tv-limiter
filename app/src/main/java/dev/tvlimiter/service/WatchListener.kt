@@ -8,8 +8,13 @@ import android.media.session.PlaybackState
 import android.os.Handler
 import android.os.Looper
 import android.service.notification.NotificationListenerService
+import dev.tvlimiter.data.PinRepository
+import dev.tvlimiter.data.ProfilesRepository
+import dev.tvlimiter.domain.Gate
 import dev.tvlimiter.domain.ParentMode
 import dev.tvlimiter.domain.Playing
+import dev.tvlimiter.domain.Viewer
+import dev.tvlimiter.domain.ViewerGate
 import dev.tvlimiter.domain.WatchTracker
 import dev.tvlimiter.domain.YouTubePackages
 
@@ -92,10 +97,18 @@ open class WatchListener : NotificationListenerService() {
         if (!connected || !TubeGuard.enabled) return
         val suppressed = ParentMode.shared.active || !TubeGuard.isConnected(this)
         val playing = callbacks.keys.firstNotNullOfOrNull { playing(it) }
-        tracker.update(TubeGuard.now(), playing, suppressed).forEach { TubeGuard.submit(this, it) }
+        tracker.update(TubeGuard.now(), playing, suppressed, if (suppressed) null else activeProfile()).forEach { TubeGuard.submit(this, it) }
         // A video already found over a limit is blocked as soon as it plays. Parent mode and an unpaired TV block nothing.
         if (!suppressed) TubeGuard.blocker(this).onPlaying(playing)
         TubeGuard.pollBlocks(this)
+    }
+
+    /** The profile watching now: the one picked, or the only one on a TV that shows no picker. Null while nobody has picked. */
+    private fun activeProfile(): String? {
+        val gate = ViewerGate.decide(Viewer.shared.current, ParentMode.shared.active, ProfilesRepository.get(this).profiles()) {
+            PinRepository.guard(this, it).hasPin()
+        }
+        return (gate as? Gate.CountFor)?.profileId
     }
 
     /** Pauses YouTube. Its TV app takes pause and play from other apps but not stop, and "next" would start an unchecked video. */

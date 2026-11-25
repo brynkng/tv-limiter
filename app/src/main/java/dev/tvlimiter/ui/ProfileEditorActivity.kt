@@ -17,12 +17,14 @@ import android.widget.Toast
 import dev.tvlimiter.R
 import dev.tvlimiter.data.PinRepository
 import dev.tvlimiter.data.ProfilesRepository
+import dev.tvlimiter.data.TubeGuardLinkRepository
+import dev.tvlimiter.service.TubeGuard
 import dev.tvlimiter.domain.AgeBand
 import dev.tvlimiter.domain.Profile
 import dev.tvlimiter.domain.Profiles
 
 /**
- * Adds or edits one child's profile: the name, the age group, the passkey, and deleting it.
+ * Adds or edits one child's profile: the name, the age group, the passkey, the TubeGuard child it reports for, and deleting it.
  * A new profile starts with a copy of the shared limits.
  */
 class ProfileEditorActivity : GuardedActivity() {
@@ -99,6 +101,7 @@ class ProfileEditorActivity : GuardedActivity() {
         }
 
         passkeyRow(profile)
+        childRow(profile)
         // The default profile holds the TV's original limits and history, so every TV keeps at least it.
         if (profile.id != Profiles.DEFAULT_ID) {
             content.addView(tvButton("Delete this profile") { askDelete() }.apply { tag = TAG_DELETE }.margins(this, top = 36))
@@ -198,6 +201,28 @@ class ProfileEditorActivity : GuardedActivity() {
         content.addView(row.fullWidth(this, top = 36))
     }
 
+    /** Which TubeGuard child this profile reports for. Only while the TV is connected to TubeGuard. */
+    private fun childRow(profile: Profile) {
+        val choice = ProfileChildChoice(
+            profile,
+            TubeGuardLinkRepository.get(this).current().childList,
+            connected = TubeGuard.isConnected(this),
+        )
+        if (!choice.visible) return
+        content.addView(label("TubeGuard child", sizeSp = 20f, weight = Weight.MEDIUM).margins(this, top = 36))
+        content.addView(label(choice.note, sizeSp = 15f, colorId = R.color.muted))
+        val options = row().apply { clipChildren = false }
+        choice.options.forEach { option ->
+            val text = if (option.selected) "✓ ${option.label}" else option.label
+            val button = tvButton(text) {
+                ProfilesRepository.get(this).upsert(choice.pick(option.childId))
+                build(focusTag = TAG_CHILD + option.childId)
+            }.apply { tag = TAG_CHILD + option.childId }
+            options.addView(button.margins(this, end = 12))
+        }
+        content.addView(options.margins(this, top = 12))
+    }
+
     private fun askDelete() {
         confirmingDelete = true
         build()
@@ -230,6 +255,7 @@ class ProfileEditorActivity : GuardedActivity() {
     companion object {
         private const val EXTRA_PROFILE = "profile"
         private const val TAG_DELETE = "delete"
+        private const val TAG_CHILD = "child:"
         private const val MAX_NAME = 20
 
         /** Edits the profile [profileId], or adds a new one when it is null. */

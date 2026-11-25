@@ -13,7 +13,15 @@ enum class AgeBand(val label: String, val passkeyOptional: Boolean) {
 }
 
 @Serializable
-data class Profile(val id: String, val name: String, val band: AgeBand) {
+data class Profile(
+    val id: String,
+    val name: String,
+    val band: AgeBand,
+    /** The TubeGuard child this profile's viewing is reported for, or null for none. */
+    val tubeGuardChildId: String? = null,
+    /** True once a parent chose in the profile editor, so an automatic link never overrides "Not linked". */
+    val linkChosen: Boolean = false,
+) {
     init {
         require(Profiles.isValidId(id)) { "Bad profile id: $id" }
     }

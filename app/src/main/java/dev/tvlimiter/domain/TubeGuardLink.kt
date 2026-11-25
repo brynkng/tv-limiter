@@ -10,6 +10,10 @@ enum class LinkStatus {
     DISCONNECTED,
 }
 
+/** A child of the family as TubeGuard names them, from the last pair or check-in reply. */
+@Serializable
+data class TubeGuardChild(val id: String, val name: String)
+
 /** This TV's pairing with a TubeGuard family. The token is a secret: it is never printed. */
 @Serializable
 data class TubeGuardLink(
@@ -18,6 +22,8 @@ data class TubeGuardLink(
     val deviceToken: String? = null,
     /** The names of the children this TV is paired to, as the parent app has them. */
     val children: List<String> = emptyList(),
+    /** The same children with their ids, kept current by every check-in. Empty until the first reply that lists them. */
+    val childList: List<TubeGuardChild> = emptyList(),
 ) {
     val isConnected: Boolean get() = status == LinkStatus.CONNECTED && !deviceToken.isNullOrEmpty()
 

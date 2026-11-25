@@ -10,7 +10,15 @@ data class Playing(val title: String, val channel: String, val lengthMs: Long)
  * One video the child watched, ready to be reported. [start] is when it first played. A [correction] is a
  * watch that was already reported, now with a longer length: the first report was an ad's.
  */
-data class Watch(val title: String, val channel: String, val durationSec: Int?, val start: Moment, val correction: Boolean = false)
+data class Watch(
+    val title: String,
+    val channel: String,
+    val durationSec: Int?,
+    val start: Moment,
+    val correction: Boolean = false,
+    /** The TV Limiter profile that was active when the watch started, or null when none was. */
+    val profileId: String? = null,
+)
 
 /**
  * Turns what YouTube's media session says into watches. It is fed the current state every few
@@ -43,7 +51,7 @@ class WatchTracker(private val rules: Rules = Rules()) {
         val maxCreditMs: Long = 15_000,
     )
 
-    private class Open(val key: String, val title: String, val channel: String, val start: Moment) {
+    private class Open(val key: String, val title: String, val channel: String, val start: Moment, val profileId: String?) {
         var lastPlayedMs = start.elapsedMs
         var playedMs = 0L
 
@@ -63,7 +71,7 @@ class WatchTracker(private val rules: Rules = Rules()) {
     private var lastUpdateMs: Long? = null
 
     /** [playing] is null when nothing is playing, including when the video is paused. */
-    fun update(now: Moment, playing: Playing?, suppressed: Boolean = false): List<Watch> {
+    fun update(now: Moment, playing: Playing?, suppressed: Boolean = false, profileId: String? = null): List<Watch> {
         creditPlay(now.elapsedMs)
         lastUpdateMs = now.elapsedMs
         val video = playing?.takeIf { it.title.isNotBlank() }
@@ -75,7 +83,7 @@ class WatchTracker(private val rules: Rules = Rules()) {
             current = null
         } else {
             val key = keyOf(video.title, video.channel)
-            val watch = open.getOrPut(key) { Open(key, video.title.trim(), video.channel.trim(), now) }
+            val watch = open.getOrPut(key) { Open(key, video.title.trim(), video.channel.trim(), now, profileId) }
             watch.longestMs = maxOf(watch.longestMs, video.lengthMs)
             watch.itemMs = video.lengthMs
             watch.lastPlayedMs = now.elapsedMs
@@ -115,12 +123,12 @@ class WatchTracker(private val rules: Rules = Rules()) {
                 if (w.playedMs >= rules.minPlayMs && due) {
                     w.reported = true
                     w.reportedMs = w.longestMs
-                    out += Watch(w.title, w.channel, seconds(w.longestMs), w.start)
+                    out += Watch(w.title, w.channel, seconds(w.longestMs), w.start, profileId = w.profileId)
                 }
             } else if (w.corrections < rules.maxCorrections && w.longestMs >= w.reportedMs + rules.correctionMs) {
                 w.corrections++
                 w.reportedMs = w.longestMs
-                out += Watch(w.title, w.channel, seconds(w.longestMs), w.start, correction = true)
+                out += Watch(w.title, w.channel, seconds(w.longestMs), w.start, correction = true, profileId = w.profileId)
             }
             if (over) iterator.remove()
         }
