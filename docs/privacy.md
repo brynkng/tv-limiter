@@ -27,9 +27,10 @@ Once connected, TV Limiter sends TubeGuard:
 
 - For each YouTube video watched on the TV: its title, its channel, its length, and when it was watched. Nothing is sent while parent mode is on.
 - Every few hours, a check-in saying whether TV Limiter can still see what YouTube plays, and the app's version.
+- While a video is being checked, or while the block screen is up, a request asking TubeGuard what it decided about that watch. If a child taps Ask a parent, a request to tell the family's parents about that video. If a parent allows a video with the passkey, a note that this video is allowed. The passkey itself stays on the TV.
 - When pairing, the TV's name (as set in its settings) and time zone.
 
-It does not send the passkey, your app limits, screen time for other apps, or anything about other apps. TubeGuard's own privacy notice explains how it rates videos and how long it keeps watch history (30 days). While connected, the TV shows an ongoing notice saying it is monitored by your family's TubeGuard parent app. Disconnecting in TV Limiter's settings, or removing the TV in the TubeGuard parent app, stops all reporting.
+TV Limiter keeps the videos it was told to block on the TV for 24 hours, so a replay is covered at once. It does not send the passkey, your app limits, screen time for other apps, or anything about other apps. TubeGuard's own privacy notice explains how it rates videos and how long it keeps watch history (30 days). While connected, the TV shows an ongoing notice saying it is monitored by your family's TubeGuard parent app. Disconnecting in TV Limiter's settings, or removing the TV in the TubeGuard parent app, stops all reporting.
 
 The app does not allow Android to back up its data, so it is not copied to a cloud backup either.
 
