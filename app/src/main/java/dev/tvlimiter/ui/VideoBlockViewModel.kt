@@ -113,11 +113,10 @@ class VideoBlockViewModel(
     fun allowThisVideo(result: ApproveResult) {
         if (step != VideoStep.ALLOW) return
         when (result) {
-            ApproveResult.Banned -> {
-                notice = "This video is banned in TubeGuard. A parent can remove the ban in the app."
-                return
-            }
-            // Without a connection the parent still gets the video until the TV sleeps.
+            // A parent at the TV with the passkey always wins. A ban TubeGuard keeps (one for all children, or on
+            // the whole channel) stays there, and the video plays here until the TV sleeps. So does a video
+            // allowed without a connection.
+            ApproveResult.Banned -> allowVideo()
             ApproveResult.Unreachable -> allowVideo()
             ApproveResult.Recorded -> allowVideo()
         }

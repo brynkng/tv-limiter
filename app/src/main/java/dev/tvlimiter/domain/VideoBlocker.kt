@@ -28,6 +28,8 @@ fun interface OutcomeSource {
  * - Only an "over" outcome blocks. Near, within, not yet checked, an unreachable backend and parent mode never do.
  * - A video found over a limit is remembered ([BlockCache]), so playing it again blocks at once.
  * - A watch whose outcome is not decided yet is asked about every [POLL_EVERY_MS] for up to [POLL_FOR_MS], then left alone.
+ * - A video found fine is asked about again every [RECHECK_EVERY_MS] while it is still the one on screen, so a
+ *   ban or a stricter setting made while it plays stops it then.
  * - A parent's allowance (this video, or this channel, until the TV sleeps) lifts a block.
  *
  * It is safe to call from the main thread ([onPlaying]) and the worker thread ([onReported], [poll]).
@@ -40,6 +42,7 @@ class VideoBlocker(
     private val actions: BlockActions,
     private val pollEveryMs: Long = POLL_EVERY_MS,
     private val pollForMs: Long = POLL_FOR_MS,
+    private val recheckEveryMs: Long = RECHECK_EVERY_MS,
 ) {
     private class Pending(val key: VideoKey, val watchEventId: String, val startedMs: Long) {
         var lastAskedMs: Long? = null
@@ -47,6 +50,9 @@ class VideoBlocker(
 
     private val lock = Any()
     private val pending = mutableListOf<Pending>()
+
+    /** The last video found fine, asked about again while it stays on screen. */
+    private var fine: Pending? = null
     private var current: VideoKey? = null
 
     /** The video the block screen covers now, or the last one it covered. */
@@ -65,7 +71,7 @@ class VideoBlocker(
 
     /** A report was taken. [outcome] is what the reply carried, null when the video is not decided yet. */
     fun onReported(key: VideoKey, watchEventId: String?, outcome: WatchOutcome?, nowMs: Long) {
-        if (outcome != null && outcome.decided) return decided(key, watchEventId, outcome)
+        if (outcome != null && outcome.decided) return decided(key, watchEventId, outcome, nowMs)
         if (watchEventId == null) return
         synchronized(lock) {
             pending.removeAll { it.key.sameVideo(key) }
@@ -84,7 +90,30 @@ class VideoBlocker(
             if (fetched is Fetch.Gone) synchronized(lock) { pending.remove(watch) }
             if (fetched !is Fetch.Got || !fetched.outcome.decided) continue
             synchronized(lock) { pending.remove(watch) }
-            decided(watch.key, watch.watchEventId, fetched.outcome)
+            decided(watch.key, watch.watchEventId, fetched.outcome, nowMs)
+        }
+        recheckFine(nowMs)
+    }
+
+    private fun recheckFine(nowMs: Long) {
+        val watch = synchronized(lock) {
+            val f = fine ?: return
+            // Only the video on screen matters; once the child moves on it is left alone.
+            if (current?.sameVideo(f.key) != true) {
+                fine = null
+                return
+            }
+            if (f.lastAskedMs?.let { nowMs - it < recheckEveryMs } == true) return
+            f.lastAskedMs = nowMs
+            f
+        }
+        when (val fetched = source.fetch(watch.watchEventId)) {
+            is Fetch.Gone -> synchronized(lock) { if (fine === watch) fine = null }
+            is Fetch.Got -> if (fetched.outcome.decided && fetched.outcome.isOver) {
+                synchronized(lock) { if (fine === watch) fine = null }
+                decided(watch.key, watch.watchEventId, fetched.outcome, nowMs)
+            }
+            else -> Unit
         }
     }
 
@@ -94,13 +123,18 @@ class VideoBlocker(
         synchronized(lock) { if (blocked?.key?.sameVideo(key) == true) blocked = null }
     }
 
+    /** Whether [poll] has anything to ask about: an undecided watch, or a fine video still on screen. */
+    fun hasWork(): Boolean = synchronized(lock) { pending.isNotEmpty() || fine != null }
+
     /** The watches still being asked about. For tests. */
     fun pendingCount(): Int = synchronized(lock) { pending.size }
 
-    private fun decided(key: VideoKey, watchEventId: String?, outcome: WatchOutcome) {
+    private fun decided(key: VideoKey, watchEventId: String?, outcome: WatchOutcome, nowMs: Long) {
         if (!outcome.isOver) {
-            // It is fine now, for example after a parent approved it. Forget an earlier block.
+            // It is fine now, for example after a parent approved it. Forget an earlier block, and keep asking
+            // while it plays in case a parent bans it or tightens a setting.
             cache.remove(key)
+            if (watchEventId != null) synchronized(lock) { fine = Pending(key, watchEventId, nowMs).also { it.lastAskedMs = nowMs } }
             return
         }
         cache.put(key, outcome, watchEventId)
@@ -124,5 +158,6 @@ class VideoBlocker(
     companion object {
         const val POLL_EVERY_MS = 3_000L
         const val POLL_FOR_MS = 90_000L
+        const val RECHECK_EVERY_MS = 15_000L
     }
 }

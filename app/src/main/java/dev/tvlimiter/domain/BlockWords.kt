@@ -5,7 +5,7 @@ package dev.tvlimiter.domain
  * TubeGuard's reason text, which is written for parents and can quote what the video shows.
  */
 object BlockWords {
-    const val HEADLINE = "This video is paused"
+    const val HEADLINE = "This video is blocked"
     private const val FALLBACK = "This video is blocked."
 
     /** What a category is, finishing "This video has a lot of ...". */

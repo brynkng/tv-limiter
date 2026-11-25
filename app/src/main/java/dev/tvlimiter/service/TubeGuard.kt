@@ -134,11 +134,11 @@ object TubeGuard {
         ).also { blockerInstance = it }
     }
 
-    /** Asks about watches whose outcome is not decided yet. Called every few seconds by the media listener. */
+    /** Asks about undecided watches, and again about the fine video on screen. Called every few seconds by the media listener. */
     fun pollBlocks(context: Context) {
         if (!isConnected(context)) return
         val blocker = blocker(context)
-        if (blocker.pendingCount() == 0 || !polling.compareAndSet(false, true)) return
+        if (!blocker.hasWork() || !polling.compareAndSet(false, true)) return
         worker.execute {
             try {
                 blocker.poll(SystemClock.elapsedRealtime())
