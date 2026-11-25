@@ -17,6 +17,7 @@ import dev.tvlimiter.data.UsageRepository
 import dev.tvlimiter.domain.GrantChoice
 import dev.tvlimiter.domain.ParentMode
 import dev.tvlimiter.domain.PinCheck
+import dev.tvlimiter.domain.Profiles
 
 /**
  * Covers an app whose time ran out. The viewer can only go home or hand the remote to the
@@ -25,6 +26,7 @@ import dev.tvlimiter.domain.PinCheck
 class BlockActivity : Activity() {
     private lateinit var model: BlockViewModel
     private lateinit var blockedPackage: String
+    private lateinit var profileId: String
     private lateinit var headline: TextView
     private lateinit var subline: TextView
     private lateinit var choosePanel: LinearLayout
@@ -43,7 +45,7 @@ class BlockActivity : Activity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         // The service may ask again for the same app before this screen is up; keep any PIN entry in progress.
-        if (::blockedPackage.isInitialized && intent.getStringExtra(EXTRA_PACKAGE) == blockedPackage) return
+        if (::blockedPackage.isInitialized && intent.getStringExtra(EXTRA_PACKAGE) == blockedPackage && profileOf(intent) == profileId) return
         start(intent)
     }
 
@@ -72,8 +74,10 @@ class BlockActivity : Activity() {
 
     private fun start(intent: Intent) {
         blockedPackage = intent.getStringExtra(EXTRA_PACKAGE) ?: return finish()
-        val usage = UsageRepository.get(this)
-        val limits = LimitsRepository.get(this)
+        // Limits, usage and any time added all belong to whoever is watching.
+        profileId = profileOf(intent)
+        val usage = UsageRepository.get(this, profileId)
+        val limits = LimitsRepository.get(this, profileId)
         model = BlockViewModel(
             blockedPackage = blockedPackage,
             limits = limits::all,
@@ -194,15 +198,19 @@ class BlockActivity : Activity() {
 
     companion object {
         private const val EXTRA_PACKAGE = "package"
+        private const val EXTRA_PROFILE = "profile"
 
         /** Whether the block screen is on screen now; read by the tracking service thread. */
         @Volatile var visible = false
             private set
 
-        fun intent(context: Context, packageName: String): Intent =
+        fun intent(context: Context, packageName: String, profileId: String = Profiles.SHARED_ID): Intent =
             Intent(context, BlockActivity::class.java)
                 .putExtra(EXTRA_PACKAGE, packageName)
+                .putExtra(EXTRA_PROFILE, profileId)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION)
+
+        private fun profileOf(intent: Intent): String = intent.getStringExtra(EXTRA_PROFILE) ?: Profiles.SHARED_ID
 
         fun appLabel(pm: PackageManager, packageName: String): String = try {
             pm.getApplicationLabel(pm.getApplicationInfo(packageName, 0)).toString()

@@ -21,12 +21,21 @@ import android.os.SystemClock
 import android.util.Log
 import dev.tvlimiter.R
 import dev.tvlimiter.data.LimitsRepository
+import dev.tvlimiter.data.ProfilesRepository
 import dev.tvlimiter.data.UsageRepository
+import dev.tvlimiter.domain.Gate
 import dev.tvlimiter.domain.LimitEvaluator
 import dev.tvlimiter.domain.ParentMode
+import dev.tvlimiter.domain.Viewer
+import dev.tvlimiter.domain.ViewerGate
 import dev.tvlimiter.ui.BlockActivity
+import dev.tvlimiter.ui.WhoActivity
 
-/** Polls usage events, charges foreground time, and covers an app with the block screen when it runs out. */
+/**
+ * Polls usage events, charges foreground time, and covers an app with the block screen when it
+ * runs out. In profiles mode the time goes to whoever picked on the "Who's watching" screen,
+ * and an app opened before anyone picked is covered by that screen.
+ */
 class TrackingService : Service() {
     private lateinit var thread: HandlerThread
     private lateinit var handler: Handler
@@ -34,9 +43,19 @@ class TrackingService : Service() {
     private var foreground: String? = null
     private var lastQueryEnd = 0L
 
-    private val screenOff = object : BroadcastReceiver() {
+    private val screenChanges = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
-            if (intent.action == Intent.ACTION_SCREEN_OFF || intent.action == Intent.ACTION_DREAMING_STARTED) ParentMode.shared.end()
+            when (intent.action) {
+                Intent.ACTION_SCREEN_OFF, Intent.ACTION_DREAMING_STARTED -> {
+                    ParentMode.shared.end()
+                    Viewer.shared.end()
+                }
+                // Waking up, or the screensaver ending, asks who is watching in profiles mode.
+                Intent.ACTION_SCREEN_ON, Intent.ACTION_DREAMING_STOPPED -> {
+                    if (getSystemService(PowerManager::class.java)?.isInteractive == false) return
+                    if (gate() == Gate.ShowPicker) showPicker(null)
+                }
+            }
         }
     }
 
@@ -57,18 +76,22 @@ class TrackingService : Service() {
         thread = HandlerThread("tracking").apply { start() }
         handler = Handler(thread.looper)
         handler.post(tick)
-        val filter = IntentFilter(Intent.ACTION_SCREEN_OFF).apply { addAction(Intent.ACTION_DREAMING_STARTED) }
+        val filter = IntentFilter(Intent.ACTION_SCREEN_OFF).apply {
+            addAction(Intent.ACTION_DREAMING_STARTED)
+            addAction(Intent.ACTION_SCREEN_ON)
+            addAction(Intent.ACTION_DREAMING_STOPPED)
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(screenOff, filter, RECEIVER_NOT_EXPORTED)
+            registerReceiver(screenChanges, filter, RECEIVER_NOT_EXPORTED)
         } else {
-            registerReceiver(screenOff, filter)
+            registerReceiver(screenChanges, filter)
         }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_STICKY
 
     override fun onDestroy() {
-        unregisterReceiver(screenOff)
+        unregisterReceiver(screenChanges)
         handler.removeCallbacksAndMessages(null)
         thread.quitSafely()
         super.onDestroy()
@@ -87,23 +110,42 @@ class TrackingService : Service() {
         // Looked up each tick so switching the default launcher takes effect right away.
         val exempt = ExemptPackages(packageName, homePackages(packageManager))
         // A second check on top of the screen-off broadcast, in case that one was missed.
-        if (getSystemService(PowerManager::class.java)?.isInteractive == false) ParentMode.shared.end()
-        // In parent mode the parent's viewing neither counts nor blocks.
-        val chargeable = pkg != null && !exempt.isExempt(pkg) && !ParentMode.shared.active
-        val seconds = accountant.secondsToCharge(SystemClock.elapsedRealtime(), chargeable)
-        if (pkg == null || !chargeable) return
+        if (getSystemService(PowerManager::class.java)?.isInteractive == false) {
+            ParentMode.shared.end()
+            Viewer.shared.end()
+        }
+        val gate = gate()
+        val counted = pkg != null && !exempt.isExempt(pkg)
+        // In parent mode the parent's viewing neither counts nor blocks, and nothing counts
+        // before someone picks who is watching.
+        val profileId = (gate as? Gate.CountFor)?.profileId
+        val seconds = accountant.secondsToCharge(SystemClock.elapsedRealtime(), counted && profileId != null)
+        if (pkg == null || !counted) return
+        if (gate == Gate.ShowPicker) return showPicker(pkg)
+        if (profileId == null) return
 
-        val usage = UsageRepository.get(this)
+        val usage = UsageRepository.get(this, profileId)
         if (seconds > 0) usage.charge(pkg, seconds)
-        val evaluation = LimitEvaluator.evaluate(LimitsRepository.get(this).all(), usage.today(), usage.weekday(), pkg)
-        if (evaluation.blocking != null) showBlock(pkg)
+        val evaluation = LimitEvaluator.evaluate(LimitsRepository.get(this, profileId).all(), usage.today(), usage.weekday(), pkg)
+        if (evaluation.blocking != null) showBlock(pkg, profileId)
     }
 
-    private fun showBlock(pkg: String) {
+    private fun gate(): Gate {
+        val profiles = ProfilesRepository.get(this).current()
+        return ViewerGate.decide(profiles.mode, Viewer.shared.current, ParentMode.shared.active, profiles.profiles.map { it.id })
+    }
+
+    private fun showBlock(pkg: String, profileId: String) {
         // Re-launch whenever the block screen isn't showing, so reopening the app is covered on
         // the next tick. A launch that lands while it is already up is ignored by BlockActivity.
         if (BlockActivity.visible) return
-        startActivity(BlockActivity.intent(this, pkg))
+        startActivity(BlockActivity.intent(this, pkg, profileId))
+    }
+
+    /** Covers [pkg] (or the home screen, when null) with the picker unless it is already up. */
+    private fun showPicker(pkg: String?) {
+        if (WhoActivity.visible) return
+        startActivity(WhoActivity.intent(this, pkg))
     }
 
     private fun queryEvents(begin: Long, end: Long): List<AppEvent> {

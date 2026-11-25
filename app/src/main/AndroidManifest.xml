@@ -56,6 +56,7 @@
         <activity android:name=".ui.AppPickerActivity" android:exported="false" />
         <activity android:name=".ui.ScheduleEditorActivity" android:exported="false" />
         <activity android:name=".ui.ReportActivity" android:exported="false" />
+        <activity android:name=".ui.ProfileEditorActivity" android:exported="false" />
 
         <activity
             android:name=".ui.BlockActivity"
@@ -63,6 +64,13 @@
             android:exported="false"
             android:launchMode="singleInstance"
             android:taskAffinity="dev.tvlimiter.block" />
+
+        <activity
+            android:name=".ui.WhoActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:launchMode="singleInstance"
+            android:taskAffinity="dev.tvlimiter.who" />
 
         <service
             android:name=".service.TrackingService"
