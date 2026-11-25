@@ -2,7 +2,7 @@
 
 An Android TV app that sets daily time limits for each app and for the TV as a whole. Each limit can have a different value for every day of the week. When time runs out, the app is covered by a block screen, and only someone who knows the passkey can add more time.
 
-TV Limiter is free and open source under the GPL-3.0 license. It has no internet permission, so nothing it records ever leaves the TV. See the [privacy policy](https://brynkng.github.io/tv-limiter/privacy).
+TV Limiter is free and open source under the GPL-3.0 license. The versions you can download have no internet permission, so nothing they record ever leaves the TV. See the [privacy policy](https://brynkng.github.io/tv-limiter/privacy).
 
 ## Download
 
@@ -30,6 +30,18 @@ An example: YouTube has 60 minutes on Tuesdays and the TV has 180. By the aftern
 ### Exempt apps
 
 This app and the home launcher never count and are never blocked, so there is always a way back to the passkey. Everything else counts toward TV time, including the system Settings app.
+
+## TubeGuard (optional)
+
+TV Limiter can also pair with a TubeGuard family and tell the family's parent app which YouTube videos were watched on the TV. This is switched off in the downloads above: it only exists in a build made with a TubeGuard address, so those builds have no internet permission and nothing leaves the TV.
+
+In a build that has one, a parent opens **Connect to TubeGuard** on the settings screen (after the passkey), types the 8 digit code from the TubeGuard parent app with the remote, and allows notification access. From then on, each YouTube video watched for at least 5 seconds is sent with its title, channel, length and how long ago it was watched. Nothing is sent while parent mode is on. A small check-in goes out every few hours saying whether notification access is still on. While connected, the TV's ongoing notification says it is monitored by the family's TubeGuard parent app. **Disconnect** on the same screen stops it and deletes anything not yet sent.
+
+```sh
+./gradlew assembleGithubRelease -PtubeguardUrl=https://your-tubeguard-address
+```
+
+Debug builds default to `http://10.0.2.2:8787`, which an emulator uses to reach a TubeGuard backend running on the same computer.
 
 ## Build
 

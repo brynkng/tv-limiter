@@ -1,6 +1,6 @@
 # TV Limiter privacy policy
 
-Last updated: November 22, 2026
+Last updated: November 25, 2026
 
 TV Limiter is a parental control app for Android TV. A parent uses it to set daily time limits for apps on the TV. This policy explains what the app records and where that information goes.
 
@@ -16,6 +16,20 @@ To enforce limits and show the screen time report, TV Limiter stores these on th
 ## Where it goes
 
 Nowhere. TV Limiter does not have the internet permission, so Android does not let it send anything off the TV. There are no accounts, ads, analytics, crash reports or third-party services. The developer never receives any of this information.
+
+This is true of the versions on Google Play and GitHub today. A separate version, which a parent can connect to a TubeGuard family, works differently. It is described in the next section and is not available yet.
+
+## If you connect TV Limiter to TubeGuard
+
+TubeGuard is a service from the same developer that tells parents what their children watched on YouTube and whether it fits the family's values. Only a version of TV Limiter built with TubeGuard can connect to it. That version has the internet permission, and sends nothing until a parent connects it with a code from the TubeGuard parent app, behind the parent passkey.
+
+Once connected, TV Limiter sends TubeGuard:
+
+- For each YouTube video watched on the TV: its title, its channel, its length, and when it was watched. Nothing is sent while parent mode is on.
+- Every few hours, a check-in saying whether TV Limiter can still see what YouTube plays, and the app's version.
+- When pairing, the TV's name (as set in its settings) and time zone.
+
+It does not send the passkey, your app limits, screen time for other apps, or anything about other apps. TubeGuard's own privacy notice explains how it rates videos and how long it keeps watch history (30 days). While connected, the TV shows an ongoing notice saying it is monitored by your family's TubeGuard parent app. Disconnecting in TV Limiter's settings, or removing the TV in the TubeGuard parent app, stops all reporting.
 
 The app does not allow Android to back up its data, so it is not copied to a cloud backup either.
 
