@@ -319,4 +319,32 @@ class VideoBlockerTest {
         assertEquals(listOf("w1", "w1"), asked)
         assertTrue(actions.shown.isEmpty())
     }
+
+    @Test
+    fun `a video a parent approved is still rechecked, so a later ban stops it`() {
+        blocker.onPlaying(castle)
+        blocker.onReported(castleKey, "w1", over, now)
+        assertEquals(1, actions.shown.size)
+
+        blocker.lifted(castleKey, "w1", now)
+        actions.showing = false
+        answers["w1"] = Fetch.Got(outcome("over", OverKind.VIDEO_BAN))
+        now += VideoBlocker.RECHECK_EVERY_MS
+        blocker.poll(now)
+        assertEquals(listOf("w1"), asked)
+        assertEquals(2, actions.shown.size)
+    }
+
+    @Test
+    fun `a video allowed by the passkey on this TV is not blocked again by the recheck`() {
+        blocker.onPlaying(castle)
+        blocker.onReported(castleKey, "w1", over, now)
+        allowances.allowVideo(castleKey)
+        blocker.lifted(castleKey, "w1", now)
+        actions.showing = false
+        answers["w1"] = Fetch.Got(outcome("over", OverKind.VIDEO_BAN))
+        now += VideoBlocker.RECHECK_EVERY_MS
+        blocker.poll(now)
+        assertEquals(1, actions.shown.size)
+    }
 }
