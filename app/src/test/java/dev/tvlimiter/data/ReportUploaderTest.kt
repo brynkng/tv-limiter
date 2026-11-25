@@ -4,6 +4,7 @@ import dev.tvlimiter.domain.LinkStatus
 import dev.tvlimiter.domain.Moment
 import dev.tvlimiter.domain.QueuedReport
 import dev.tvlimiter.domain.TubeGuardLink
+import dev.tvlimiter.domain.WatchOutcome
 import java.io.File
 import java.io.IOException
 import kotlinx.serialization.json.Json
@@ -36,13 +37,18 @@ class ReportUploaderTest {
             if (next is IOException) throw next
             return next as HttpReply
         }
+        override fun get(path: String, token: String?): HttpReply = throw UnsupportedOperationException("reports are only posted")
         fun titles() = sent.map { Json.parseToJsonElement(it.third).jsonObject["title"]!!.jsonPrimitive.content }
     }
 
     private var clock = Moment(100_000, 9_000_000)
     private var boot = 7
-    private fun uploader(queue: ReportQueueRepository, transport: TubeGuardTransport, token: String? = "tok") =
-        ReportUploader(queue, transport, token = { token }, now = { clock }, bootCount = { boot })
+    private fun uploader(
+        queue: ReportQueueRepository,
+        transport: TubeGuardTransport,
+        token: String? = "tok",
+        onSent: (QueuedReport, String?, WatchOutcome?) -> Unit = { _, _, _ -> },
+    ) = ReportUploader(queue, transport, token = { token }, now = { clock }, bootCount = { boot }, onSent = onSent)
 
     @Test
     fun `reports are sent oldest first with the device token`() {
@@ -286,5 +292,20 @@ class ReportUploaderTest {
 
         repo().forget()
         assertEquals(LinkStatus.NOT_CONNECTED, repo().current().status)
+    }
+
+    @Test
+    fun `each report the backend takes is passed on with its id and the outcome the reply carried`() {
+        val queue = queue()
+        queue.add(report("scary"))
+        queue.add(report("plain"))
+        val over = """{"watchEventId":"w1","outcome":{"decided":true,"outcome":"over","kind":"value","value":"scary","level":"a_lot"}}"""
+        val transport = FakeTransport(mutableListOf(HttpReply(201, over), HttpReply(201, """{"watchEventId":"w2","outcome":null}""")))
+        val seen = mutableListOf<Triple<String, String?, WatchOutcome?>>()
+        uploader(queue, transport, onSent = { r, id, o -> seen += Triple(r.title, id, o) }).flush()
+        assertEquals(listOf("scary", "plain"), seen.map { it.first })
+        assertEquals(listOf<String?>("w1", "w2"), seen.map { it.second })
+        assertTrue(seen[0].third!!.isOver)
+        assertNull(seen[1].third)
     }
 }
