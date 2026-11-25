@@ -89,7 +89,7 @@ object TubeGuard {
         val app = context.applicationContext
         val key = TubeGuardWire.watchKey(bootCount(app), update.start.elapsedMs)
         worker.execute {
-            spanUploaderFor(app).add(key, update.spans)
+            spanUploaderFor(app).add(key, update.spans, update.positionSec)
             flushSpans(app)
         }
     }

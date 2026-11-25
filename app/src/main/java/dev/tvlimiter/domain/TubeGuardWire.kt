@@ -32,6 +32,8 @@ data class QueuedReport(
     val shortKey: String? = null,
     /** What was played of the video when it was reported, or null when the session gave no position. */
     val spans: List<Span>? = null,
+    /** Where the player was, in whole seconds, when the spans were taken. Null when the session gave no position. */
+    val position: Int? = null,
 ) {
     /** Which watch this is, among the ones from this boot. A correction and the report it corrects share it. */
     val key: String get() = "$bootCount:$startElapsedMs"
@@ -114,7 +116,10 @@ object TubeGuardWire {
     fun watchKey(bootCount: Int, startElapsedMs: Long) = "$bootCount:$startElapsedMs"
 
     /** The played spans as the backend reads them: pairs of seconds from the start of the video. */
-    fun spansBody(spans: List<Span>): String = buildJsonObject { put("spans", spansJson(spans)) }.toString()
+    fun spansBody(spans: List<Span>, position: Int? = null): String = buildJsonObject {
+        put("spans", spansJson(spans))
+        position?.let { put("position", it) }
+    }.toString()
 
     private fun spansJson(spans: List<Span>) = JsonArray(spans.map { JsonArray(listOf(JsonPrimitive(it.startSec), JsonPrimitive(it.endSec))) })
 
@@ -167,6 +172,7 @@ object TubeGuardWire {
             replaces?.let { put("replaces", it) }
             report.childId?.let { put("childId", it) }
             report.spans?.let { put("spans", spansJson(it)) }
+            if (report.spans != null) report.position?.let { put("position", it) }
         }.toString()
     }
 
@@ -190,6 +196,7 @@ object TubeGuardWire {
         image = watch.short?.jpegBase64,
         shortKey = watch.short?.key,
         spans = watch.spans,
+        position = watch.positionSec,
     )
 
     fun pairResult(status: Int, body: String): PairResult = when {

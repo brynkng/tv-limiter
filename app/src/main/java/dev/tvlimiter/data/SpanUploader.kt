@@ -17,12 +17,12 @@ class SpanUploader(
     private val token: () -> String?,
 ) {
     private val lock = Any()
-    private val pending = LinkedHashMap<String, List<Span>>()
+    private val pending = LinkedHashMap<String, Pair<List<Span>, Int?>>()
 
     /** Keeps the newest spans for the watch named [key], to send with the next [flush]. */
-    fun add(key: String, spans: List<Span>) = synchronized(lock) {
+    fun add(key: String, spans: List<Span>, position: Int? = null) = synchronized(lock) {
         pending.remove(key)
-        pending[key] = spans
+        pending[key] = spans to position
         while (pending.size > MAX_PENDING) pending.remove(pending.keys.first())
     }
 
@@ -30,16 +30,17 @@ class SpanUploader(
     fun flush(): Boolean {
         val deviceToken = token() ?: return true
         val due = synchronized(lock) { pending.entries.map { it.key to it.value } }
-        for ((key, spans) in due) {
+        for ((key, entry) in due) {
+            val (spans, position) = entry
             val id = queue.sentId(key) ?: continue
             val outcome = try {
-                UploadOutcome.of(transport.post(TubeGuardWire.spansPath(id), deviceToken, TubeGuardWire.spansBody(spans)).status)
+                UploadOutcome.of(transport.post(TubeGuardWire.spansPath(id), deviceToken, TubeGuardWire.spansBody(spans, position)).status)
             } catch (e: IOException) {
                 UploadOutcome.Retry
             }
             when (outcome) {
                 // A newer list that arrived while this one was going stays.
-                UploadOutcome.Sent, UploadOutcome.Rejected -> synchronized(lock) { if (pending[key] == spans) pending.remove(key) }
+                UploadOutcome.Sent, UploadOutcome.Rejected -> synchronized(lock) { if (pending[key] == entry) pending.remove(key) }
                 UploadOutcome.Retry -> return false
                 UploadOutcome.Disconnected -> {
                     synchronized(lock) { pending.clear() }

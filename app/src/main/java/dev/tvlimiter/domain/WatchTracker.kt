@@ -10,7 +10,7 @@ data class Moment(val elapsedMs: Long, val wallMs: Long)
 data class Span(val startSec: Int, val endSec: Int)
 
 /** What was played of one watch, to tell TubeGuard. [start] names the watch, as in [Watch.start]. */
-data class SpanUpdate(val start: Moment, val spans: List<Span>)
+data class SpanUpdate(val start: Moment, val spans: List<Span>, val positionSec: Int? = null)
 
 /** What YouTube's media session says is playing right now. */
 data class Playing(
@@ -42,6 +42,8 @@ data class Watch(
     val short: ShortArt? = null,
     /** What has been played of the video so far, or null when the session never gave a position (the backend then rates from the start). */
     val spans: List<Span>? = null,
+    /** Where the player was when this was handed back, in whole seconds, or null when the session gave no position. */
+    val positionSec: Int? = null,
 ) {
     val isShort: Boolean get() = short != null
 }
@@ -118,6 +120,9 @@ class WatchTracker(private val rules: Rules = Rules()) {
         var lastPositionMs: Long? = null
         var lastPositionAtMs = 0L
         var positionSeen = false
+
+        /** The latest position played under the video's own length, kept through pauses. */
+        var currentMs: Long? = null
         var sentSpans: List<Span>? = null
         var sentAtMs = 0L
         var sentMinute = false
@@ -203,6 +208,7 @@ class WatchTracker(private val rules: Rules = Rules()) {
         w.lastPositionMs = pos
         w.lastPositionAtMs = nowMs
         w.positionSeen = true
+        w.currentMs = pos
         val last = w.played.lastOrNull()
         // Playing on from the last position: at most twice as fast as the clock, and not backwards past a little noise.
         val continues = previous != null && last != null && gapMs <= rules.maxCreditMs && pos >= previous - BACKWARD_NOISE_MS && pos - previous <= gapMs * 2 + FORWARD_SLACK_MS
@@ -218,6 +224,8 @@ class WatchTracker(private val rules: Rules = Rules()) {
         }
         return out
     }
+
+    private fun positionOf(w: Open): Int? = w.currentMs?.let { round(it) }
 
     private fun round(ms: Long): Int = ((ms + 500) / 1000).toInt()
 
@@ -238,7 +246,7 @@ class WatchTracker(private val rules: Rules = Rules()) {
         w.sentSpans = spans
         w.sentAtMs = nowMs
         if (playedSeconds(spans) >= rules.minuteSec) w.sentMinute = true
-        pendingSpans += SpanUpdate(w.start, spans)
+        pendingSpans += SpanUpdate(w.start, spans, positionOf(w))
     }
 
     /** A watch is over: whatever was played since the last update goes out. */
@@ -278,12 +286,12 @@ class WatchTracker(private val rules: Rules = Rules()) {
                         w.sentAtMs = nowMs
                         if (playedSeconds(it) >= rules.minuteSec) w.sentMinute = true
                     }
-                    out += Watch(w.title, w.channel, seconds(w.longestMs), w.start, profileId = w.profileId, short = w.art, spans = spans)
+                    out += Watch(w.title, w.channel, seconds(w.longestMs), w.start, profileId = w.profileId, short = w.art, spans = spans, positionSec = if (spans != null) positionOf(w) else null)
                 }
             } else if (w.art == null && w.corrections < rules.maxCorrections && w.longestMs >= w.reportedMs + rules.correctionMs) {
                 w.corrections++
                 w.reportedMs = w.longestMs
-                out += Watch(w.title, w.channel, seconds(w.longestMs), w.start, correction = true, profileId = w.profileId, spans = if (w.positionSeen) spansOf(w) else null)
+                out += Watch(w.title, w.channel, seconds(w.longestMs), w.start, correction = true, profileId = w.profileId, spans = if (w.positionSeen) spansOf(w) else null, positionSec = if (w.positionSeen) positionOf(w) else null)
             }
             if (over) {
                 endOf(w)

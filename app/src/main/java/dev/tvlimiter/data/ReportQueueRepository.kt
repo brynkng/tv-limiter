@@ -43,7 +43,7 @@ class ReportQueueRepository(private val store: JsonFileStore<ReportQueueFile>) {
         if (!report.correction) return@synchronized save(file.copy(reports = limitShorts(file.reports + report).takeLast(MAX_REPORTS)))
         val waiting = file.reports.indexOfFirst { it.key == report.key }
         when {
-            waiting >= 0 -> save(file.copy(reports = file.reports.mapIndexed { i, r -> if (i == waiting) r.copy(durationSec = report.durationSec, spans = report.spans ?: r.spans) else r }))
+            waiting >= 0 -> save(file.copy(reports = file.reports.mapIndexed { i, r -> if (i == waiting) r.copy(durationSec = report.durationSec, spans = report.spans ?: r.spans, position = report.position ?: r.position) else r }))
             file.sent.any { it.key == report.key } -> save(file.copy(reports = (file.reports + report).takeLast(MAX_REPORTS)))
         }
     }
