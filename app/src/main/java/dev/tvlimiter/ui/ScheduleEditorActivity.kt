@@ -10,6 +10,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import dev.tvlimiter.R
 import dev.tvlimiter.data.LimitsRepository
+import dev.tvlimiter.data.ProfilesRepository
 import dev.tvlimiter.data.UsageRepository
 import dev.tvlimiter.domain.Limit
 import java.time.DayOfWeek
@@ -27,6 +28,7 @@ class ScheduleEditorActivity : GuardedActivity() {
     private val dayBars = mutableListOf<TimeBar>()
     private val dayValues = mutableListOf<TextView>()
     private var enableButton: Button? = null
+    private var todayLine: TextView? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -35,7 +37,7 @@ class ScheduleEditorActivity : GuardedActivity() {
     }
 
     override fun onUnlockedResume() {
-        val limit = LimitsRepository.get(this).find(limitId) ?: return finish()
+        val limit = LimitsRepository.get(this, profileId).find(limitId) ?: return finish()
         state = ScheduleEditorState(limit.minutesByDay)
         build(limit)
     }
@@ -44,19 +46,17 @@ class ScheduleEditorActivity : GuardedActivity() {
         content.removeAllViews()
         dayBars.clear()
         dayValues.clear()
-        val usageRepo = UsageRepository.get(this)
+        val usageRepo = UsageRepository.get(this, profileId)
         val today = usageRepo.weekday()
         val summary = LimitSummary.of(limit, usageRepo.today(), today)
 
         content.addView(label(limitName(limit), sizeSp = 34f, bold = true))
-        content.addView(
-            label("Today: ${summary.status}", sizeSp = 20f, colorId = if (summary.exhausted) R.color.warn else R.color.muted)
-                .margins(this, top = 6),
-        )
+        todayLine = label("Today: ${summary.status}", sizeSp = 20f, colorId = if (summary.exhausted) R.color.warn else R.color.muted)
+        content.addView(todayLine?.margins(this, top = 6))
         summary.added?.let { addedTimeRow(it) }
 
         content.addView(
-            label("How long your child can use this each day. Left and right change a day by 15 minutes; below 0 means no limit.", sizeSp = 15f, colorId = R.color.muted)
+            label("How long ${whoseLimit()} can use this each day. Left and right change a day by 15 minutes; below 0 means no limit.", sizeSp = 15f, colorId = R.color.muted)
                 .margins(this, top = 20),
         )
         var firstDay: LinearLayout? = null
@@ -77,7 +77,7 @@ class ScheduleEditorActivity : GuardedActivity() {
         if (!limit.isWholeTv) {
             actions.addView(
                 tvButton("Delete this limit") {
-                    LimitsRepository.get(this).delete(limitId)
+                    LimitsRepository.get(this, profileId).delete(limitId)
                     finish()
                 },
             )
@@ -96,8 +96,8 @@ class ScheduleEditorActivity : GuardedActivity() {
         }
         row.addView(label("You added $added today.", sizeSp = 18f), LinearLayout.LayoutParams(0, -2, 1f))
         val button = tvButton("Remove added time") {
-            UsageRepository.get(this).clearGrants(limitId)
-            LimitsRepository.get(this).find(limitId)?.let { build(it) }
+            UsageRepository.get(this, profileId).clearGrants(limitId)
+            LimitsRepository.get(this, profileId).find(limitId)?.let { build(it) }
         }
         row.addView(button)
         content.addView(row.fullWidth(this, top = 20))
@@ -131,7 +131,7 @@ class ScheduleEditorActivity : GuardedActivity() {
     private fun toggleEnabled() = update { it.copy(enabled = !it.enabled) }
 
     private fun update(change: (Limit) -> Limit) {
-        val repo = LimitsRepository.get(this)
+        val repo = LimitsRepository.get(this, profileId)
         val limit = repo.find(limitId) ?: return finish()
         val updated = change(limit)
         repo.upsert(updated)
@@ -147,13 +147,21 @@ class ScheduleEditorActivity : GuardedActivity() {
             dayBars[index].fraction = minutes?.let { it / scale }
         }
         enableButton?.text = if (limit.enabled) "Turn this limit off" else "Turn this limit on"
+        val usageRepo = UsageRepository.get(this, profileId)
+        val summary = LimitSummary.of(limit, usageRepo.today(), usageRepo.weekday())
+        todayLine?.text = "Today: ${summary.status}"
+        todayLine?.setTextColor(color(if (summary.exhausted) R.color.warn else R.color.muted))
     }
+
+    /** The child's name in profiles mode; "your child" for the shared limits. */
+    private fun whoseLimit(): String =
+        ProfilesRepository.get(this).current().find(profileId)?.name ?: "your child"
 
     companion object {
         private const val EXTRA_LIMIT_ID = "limit_id"
         private const val BAR_SCALE_MINUTES = 4 * 60
 
-        fun intent(context: Context, limitId: String): Intent =
-            Intent(context, ScheduleEditorActivity::class.java).putExtra(EXTRA_LIMIT_ID, limitId)
+        fun intent(context: Context, limitId: String, profileId: String): Intent =
+            Intent(context, ScheduleEditorActivity::class.java).putExtra(EXTRA_LIMIT_ID, limitId).withProfile(profileId)
     }
 }

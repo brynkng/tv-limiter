@@ -28,8 +28,8 @@ class AppPickerActivity : GuardedActivity() {
     override fun onUnlockedResume() {
         content.removeAllViews()
         content.addView(label("Which app should have a limit?", sizeSp = 34f, bold = true))
-        val usage = UsageRepository.get(this).today()
-        val limited = LimitsRepository.get(this).all().map { it.id }.toSet()
+        val usage = UsageRepository.get(this, profileId).today()
+        val limited = LimitsRepository.get(this, profileId).all().map { it.id }.toSet()
         val apps = launchablePackages(packageManager, packageName)
             .map { it to BlockActivity.appLabel(packageManager, it) }
             .sortedWith(compareByDescending<Pair<String, String>> { usage.secondsFor(it.first) }.thenBy { it.second.lowercase() })
@@ -107,10 +107,10 @@ class AppPickerActivity : GuardedActivity() {
     }
 
     private fun pick(packageName: String) {
-        val limits = LimitsRepository.get(this)
+        val limits = LimitsRepository.get(this, profileId)
         val id = Limit.appLimitId(packageName)
         if (limits.find(id) == null) limits.upsert(Limit.newAppLimit(packageName))
-        startActivity(ScheduleEditorActivity.intent(this, id))
+        startActivity(ScheduleEditorActivity.intent(this, id, profileId))
         finish()
     }
 

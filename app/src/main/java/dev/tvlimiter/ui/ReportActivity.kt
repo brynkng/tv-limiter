@@ -97,8 +97,8 @@ class ReportActivity : GuardedActivity() {
     }
 
     private fun render() {
-        val usageRepo = UsageRepository.get(this)
-        val history = HistoryRepository.get(this).all()
+        val usageRepo = UsageRepository.get(this, profileId)
+        val history = HistoryRepository.get(this, profileId).all()
         val today = LocalDate.now()
         periods = UsageReport.periods(history, usageRepo.today(), today, range)
         tabs.forEach { (r, tab) -> tab.isSelected = r == range }

@@ -11,20 +11,34 @@ import dev.tvlimiter.R
 import dev.tvlimiter.domain.ParentMode
 import dev.tvlimiter.data.LimitsRepository
 import dev.tvlimiter.data.PinRepository
+import dev.tvlimiter.data.ProfilesRepository
 import dev.tvlimiter.data.UsageRepository
 import dev.tvlimiter.domain.Limit
+import dev.tvlimiter.domain.Mode
+import dev.tvlimiter.domain.Profile
+import dev.tvlimiter.domain.Profiles
+import dev.tvlimiter.domain.Viewer
 import dev.tvlimiter.domain.NotificationAccessGuide
 import dev.tvlimiter.service.TrackingService
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
-/** The owner's home screen: every limit with today's time left, a way to add app limits, and permission status. */
+/**
+ * The owner's home screen: every limit with today's time left, a way to add app limits, the
+ * profiles, and permission status. In profiles mode it shows one child's limits at a time.
+ */
 class SettingsActivity : GuardedActivity() {
     private lateinit var content: LinearLayout
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         TrackingService.start(this)
+        // In profiles mode the TV Limiter icon opens the picker, which has its own way here.
+        if (ProfilesRepository.get(this).mode() == Mode.PROFILES && !intent.getBooleanExtra(EXTRA_FROM_PICKER, false)) {
+            startActivity(WhoActivity.intent(this))
+            finish()
+            return
+        }
         content = scrollScreen()
     }
 
@@ -36,38 +50,66 @@ class SettingsActivity : GuardedActivity() {
 
     override fun onUnlockedResume() = render()
 
-    private fun render(keepParentModeFocus: Boolean = false) {
+    /** Rebuilds the screen. [focusTag] names the view to focus afterwards, so a button press doesn't lose its place. */
+    private fun render(focusTag: String? = null) {
         content.removeAllViews()
+        val profiles = ProfilesRepository.get(this).current()
+        val shown = shownProfile(profiles.mode, profiles.profiles)
+        val profileId = shown?.id ?: Profiles.SHARED_ID
         val header = row()
         header.addView(label(getString(R.string.app_name), sizeSp = 34f, bold = true), LinearLayout.LayoutParams(0, -2, 1f))
         header.addView(label(LocalDate.now().format(DateTimeFormatter.ofPattern("EEEE, MMMM d")), sizeSp = 18f, colorId = R.color.muted))
         content.addView(header.fullWidth(this))
-        content.addView(label("Your child's screen time today", sizeSp = 18f, colorId = R.color.muted).margins(this, top = 2))
+        val whose = shown?.let { "${it.name}'s" } ?: "Your child's"
+        content.addView(label("$whose screen time today", sizeSp = 18f, colorId = R.color.muted).margins(this, top = 2))
+        if (profiles.mode == Mode.PROFILES) profileChooser(profiles.profiles, shown)
 
-        val usageRepo = UsageRepository.get(this)
+        val usageRepo = UsageRepository.get(this, profileId)
         val usage = usageRepo.today()
         val day = usageRepo.weekday()
-        val limits = LimitsRepository.get(this).all().sortedBy { !it.isWholeTv }
+        val limits = LimitsRepository.get(this, profileId).all().sortedBy { !it.isWholeTv }
         var first: View? = null
         limits.forEachIndexed { index, limit ->
-            val row = limitRow(limit, LimitSummary.of(limit, usage, day))
+            val row = limitRow(limit, LimitSummary.of(limit, usage, day), profileId)
             content.addView(row.fullWidth(this, top = if (index == 0) 28 else 12))
             if (first == null) first = row
         }
         val buttons = row().apply { clipChildren = false }
-        buttons.addView(tvButton("Add an app") { startActivity(Intent(this, AppPickerActivity::class.java)) }.margins(this, end = 12))
-        buttons.addView(tvButton("See screen time history") { startActivity(Intent(this, ReportActivity::class.java)) })
+        buttons.addView(tvButton("Add an app") { startActivity(Intent(this, AppPickerActivity::class.java).withProfile(profileId)) }.margins(this, end = 12))
+        buttons.addView(tvButton("See screen time history") { startActivity(Intent(this, ReportActivity::class.java).withProfile(profileId)) })
         content.addView(buttons.margins(this, top = 24))
-        val parentModeButton = parentModeRow()
+        parentModeRow()
+        profilesSection(profiles.mode, profiles.profiles)
         passkeyRow()
-        permissions()
+        permissions(profiles.mode)
         notificationAccess()
         Donate.addTo(this, content)
-        (if (keepParentModeFocus) parentModeButton else first)?.requestFocus()
+        (focusTag?.let { content.findViewWithTag<View>(it) } ?: first)?.requestFocus()
     }
 
-    private fun limitRow(limit: Limit, summary: LimitSummary): View {
-        val row = focusRow { openEditor(limit.id) }
+    /** The child whose limits are shown: null in shared mode, where the shared limits are shown. */
+    private fun shownProfile(mode: Mode, profiles: List<Profile>): Profile? {
+        if (mode != Mode.PROFILES) return null
+        return profiles.firstOrNull { it.id == shownProfileId } ?: profiles.firstOrNull()
+    }
+
+    /** One button per child; the limits below are for the one with the check mark. */
+    private fun profileChooser(profiles: List<Profile>, shown: Profile?) {
+        val line = row().apply { clipChildren = false }
+        line.addView(label("Limits for", sizeSp = 18f, colorId = R.color.muted).margins(this, end = 16))
+        profiles.forEach { profile ->
+            val text = if (profile.id == shown?.id) "✓ ${profile.name}" else profile.name
+            val button = tvButton(text) {
+                shownProfileId = profile.id
+                render(focusTag = "show:${profile.id}")
+            }.apply { tag = "show:${profile.id}" }
+            line.addView(button.margins(this, end = 12))
+        }
+        content.addView(line.margins(this, top = 20))
+    }
+
+    private fun limitRow(limit: Limit, summary: LimitSummary, profileId: String): View {
+        val row = focusRow { openEditor(limit.id, profileId) }
         row.addView(label(limitName(limit), sizeSp = 22f, weight = Weight.MEDIUM), LinearLayout.LayoutParams(dp(240), -2))
         val bar = TimeBar(this).apply {
             fraction = summary.fraction
@@ -86,7 +128,7 @@ class SettingsActivity : GuardedActivity() {
     }
 
     /** Parent mode can also start here, and this is where a parent ends it early. */
-    private fun parentModeRow(): View {
+    private fun parentModeRow() {
         val on = ParentMode.shared.active
         val row = row()
         val text = column()
@@ -101,11 +143,77 @@ class SettingsActivity : GuardedActivity() {
         row.addView(text, LinearLayout.LayoutParams(0, -2, 1f))
         val button = tvButton(if (on) "Turn off parent mode" else "Start parent mode") {
             if (on) ParentMode.shared.end() else ParentMode.shared.start()
-            render(keepParentModeFocus = true)
-        }
+            render(focusTag = TAG_PARENT_MODE)
+        }.apply { tag = TAG_PARENT_MODE }
         row.addView(button)
         content.addView(row.fullWidth(this, top = 40))
-        return button
+    }
+
+    /** The switch between shared limits and profiles, each child's profile, and a way to add one. */
+    private fun profilesSection(mode: Mode, profiles: List<Profile>) {
+        val on = mode == Mode.PROFILES
+        val row = row()
+        val text = column()
+        text.addView(label(if (on) "Profiles are on" else "Profiles", sizeSp = 20f, weight = Weight.MEDIUM, colorId = if (on) R.color.accent else R.color.text))
+        text.addView(
+            label(
+                if (on) {
+                    "Each child picks their name when the TV wakes up. Their time counts only against their own limits."
+                } else {
+                    "Everyone shares the limits above. With profiles on, each child picks their name when the TV wakes up and has their own limits."
+                },
+                sizeSp = 15f,
+                colorId = R.color.muted,
+            ),
+        )
+        row.addView(text, LinearLayout.LayoutParams(0, -2, 1f).apply { marginEnd = dp(24) })
+        val switch = tvButton(if (on) "Go back to shared limits" else "Turn on profiles") { switchMode(turnOn = !on) }.apply { tag = TAG_MODE }
+        row.addView(switch)
+        content.addView(row.fullWidth(this, top = 40))
+
+        profiles.forEach { profile ->
+            val hasPasskey = PinRepository.guard(this, profile.id).hasPin()
+            val item = focusRow { startActivity(ProfileEditorActivity.intent(this, profile.id)) }
+            item.addView(label(profile.name, sizeSp = 20f, weight = Weight.MEDIUM), LinearLayout.LayoutParams(0, -2, 1f))
+            item.addView(label(profile.band.label, sizeSp = 16f, colorId = R.color.muted), LinearLayout.LayoutParams(dp(240), -2))
+            val needs = profile.needsPasskey(hasPasskey)
+            val status = when {
+                needs -> "Needs a passkey"
+                hasPasskey -> "Passkey set"
+                else -> "No passkey needed"
+            }
+            item.addView(
+                label(status, sizeSp = 16f, colorId = if (needs) R.color.warn else R.color.muted).apply { gravity = Gravity.END },
+                LinearLayout.LayoutParams(dp(220), -2),
+            )
+            content.addView(item.fullWidth(this, top = 12))
+        }
+        val add = tvButton("Add a profile") { startActivity(ProfileEditorActivity.intent(this, null)) }.apply { id = View.generateViewId() }
+        // With no profile rows between them, focus search from the right-hand switch skips this
+        // left-hand button, so point the two at each other.
+        switch.id = View.generateViewId()
+        if (profiles.isEmpty()) {
+            switch.nextFocusDownId = add.id
+            add.nextFocusUpId = switch.id
+        }
+        content.addView(add.margins(this, top = 16))
+    }
+
+    private fun switchMode(turnOn: Boolean) {
+        val repo = ProfilesRepository.get(this)
+        if (!turnOn) {
+            repo.setMode(Mode.SHARED)
+            Viewer.shared.end()
+        } else {
+            val problem = Profiles.switchProblem(repo.profiles()) { PinRepository.guard(this, it).hasPin() }
+            if (problem != null) {
+                Toast.makeText(this, problem, Toast.LENGTH_LONG).show()
+                return
+            }
+            repo.setMode(Mode.PROFILES)
+            Viewer.shared.end()
+        }
+        render(focusTag = TAG_MODE)
     }
 
     private fun passkeyRow() {
@@ -134,11 +242,12 @@ class SettingsActivity : GuardedActivity() {
     }
 
     /** One quiet line when everything is granted; otherwise a card that says what to fix. */
-    private fun permissions() {
+    private fun permissions(mode: Mode) {
         val usage = PermissionStatus.hasUsageAccess(this)
         val overlay = PermissionStatus.canDrawOverlays(this)
         if (usage && overlay) {
-            content.addView(label("Tracking is on. Limits apply to everyone using this TV.", sizeSp = 15f, colorId = R.color.muted).margins(this, top = 32))
+            val whom = if (mode == Mode.PROFILES) "Each child's limits apply to them only." else "Limits apply to everyone using this TV."
+            content.addView(label("Tracking is on. $whom", sizeSp = 15f, colorId = R.color.muted).margins(this, top = 32))
             return
         }
         val card = column().apply {
@@ -221,9 +330,16 @@ class SettingsActivity : GuardedActivity() {
         }
     }
 
-    private fun openEditor(limitId: String) = startActivity(ScheduleEditorActivity.intent(this, limitId))
+    private fun openEditor(limitId: String, profileId: String) = startActivity(ScheduleEditorActivity.intent(this, limitId, profileId))
 
-    private companion object {
-        const val REQUEST_CHANGE_PASSKEY = 42
+    companion object {
+        /** Set by the picker's Settings button; without it, profiles mode sends the icon to the picker. */
+        const val EXTRA_FROM_PICKER = "from_picker"
+        private const val REQUEST_CHANGE_PASSKEY = 42
+        private const val TAG_PARENT_MODE = "parent_mode"
+        private const val TAG_MODE = "mode"
+
+        /** The child whose limits the home screen last showed, kept while the app runs. */
+        private var shownProfileId: String? = null
     }
 }
