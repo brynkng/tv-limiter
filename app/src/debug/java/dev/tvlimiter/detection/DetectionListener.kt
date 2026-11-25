@@ -1,6 +1,7 @@
 package dev.tvlimiter.detection
 
 import android.content.ComponentName
+import android.graphics.Bitmap
 import android.media.MediaMetadata
 import android.media.session.MediaController
 import android.media.session.MediaSessionManager
@@ -57,7 +58,8 @@ class DetectionListener : NotificationListenerService() {
         }
         for (controller in controllers) {
             val pkg = controller.packageName
-            if (!Targets.isTarget(pkg) || callbacks.containsKey(pkg)) continue
+            // Every app's session is followed, so we learn what each streaming app reports.
+            if (callbacks.containsKey(pkg)) continue
             val callback = object : MediaController.Callback() {
                 override fun onMetadataChanged(metadata: MediaMetadata?) = logMetadata(controller, metadata)
                 override fun onPlaybackStateChanged(state: PlaybackState?) = logPlayback(controller, state)
@@ -105,11 +107,13 @@ class DetectionListener : NotificationListenerService() {
         val values = LinkedHashMap<String, Any?>()
         m?.keySet()?.sorted()?.forEach { key -> values[key] = metadataValue(m, key) }
         val description = m?.description
+        val thumbnail = m?.let { saveThumbnail(c.packageName, it) }
         EventLog.write(
             this, "metadata",
             listOf(
                 "package" to c.packageName,
                 "values" to values,
+                "thumbnail_file" to thumbnail,
                 "description" to mapOf(
                     "media_id" to description?.mediaId,
                     "media_uri" to description?.mediaUri?.toString(),
@@ -139,11 +143,31 @@ class DetectionListener : NotificationListenerService() {
         )
     }
 
+    /** Saves the session's image once per title, so it can be looked at next to the log. */
+    private fun saveThumbnail(pkg: String, m: MediaMetadata): String? {
+        val title = m.getString(MediaMetadata.METADATA_KEY_TITLE)
+        if (title.isNullOrBlank()) return null
+        val art = IMAGE_KEYS.firstNotNullOfOrNull { key -> runCatching { m.getBitmap(key) }.getOrNull() } ?: return null
+        val name = ThumbnailNames.fileName(pkg, title, m.getString(MediaMetadata.METADATA_KEY_ARTIST))
+        return try {
+            val file = java.io.File(EventLog.file(this).parentFile, "thumbs/$name")
+            if (!file.exists()) {
+                file.parentFile?.mkdirs()
+                file.outputStream().use { art.compress(Bitmap.CompressFormat.JPEG, 85, it) }
+            }
+            "thumbs/$name"
+        } catch (e: Exception) {
+            EventLog.write(this, "error", listOf("where" to "save_thumbnail", "message" to e.toString()))
+            null
+        }
+    }
+
     override fun onNotificationPosted(sbn: StatusBarNotification) = logNotification("notification_posted", sbn)
     override fun onNotificationRemoved(sbn: StatusBarNotification) = logNotification("notification_removed", sbn)
 
     private fun logNotification(event: String, sbn: StatusBarNotification) {
-        if (!Targets.isTarget(sbn.packageName)) return
+        // Media notifications from any app, plus everything from YouTube and Chrome.
+        if (!Targets.isTarget(sbn.packageName) && sbn.notification.extras?.get("android.mediaSession") == null) return
         val n = sbn.notification
         EventLog.write(
             this, event,
@@ -216,6 +240,9 @@ class DetectionListener : NotificationListenerService() {
             "android.media.metadata.ADVERTISEMENT", "android.media.metadata.DOWNLOAD_STATUS",
         )
         private val BITMAP_KEYS = setOf(
+            MediaMetadata.METADATA_KEY_ART, MediaMetadata.METADATA_KEY_ALBUM_ART, MediaMetadata.METADATA_KEY_DISPLAY_ICON,
+        )
+        private val IMAGE_KEYS = listOf(
             MediaMetadata.METADATA_KEY_ART, MediaMetadata.METADATA_KEY_ALBUM_ART, MediaMetadata.METADATA_KEY_DISPLAY_ICON,
         )
         private val RATING_KEYS = setOf(MediaMetadata.METADATA_KEY_USER_RATING, MediaMetadata.METADATA_KEY_RATING)
