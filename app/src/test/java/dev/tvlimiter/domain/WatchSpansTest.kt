@@ -157,7 +157,7 @@ class WatchSpansTest {
     }
 
     @Test
-    fun `a watch with no position has none to send, and a Short sends none`() {
+    fun `a watch whose session gives no position has none to send`() {
         var t = 0
         while (t <= 9) {
             at(t, item(null))
