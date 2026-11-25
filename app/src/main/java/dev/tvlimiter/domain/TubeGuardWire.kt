@@ -88,6 +88,14 @@ object TubeGuardWire {
     const val HEARTBEAT = "/api/heartbeat"
     const val REPORTS = "/api/reports"
     const val DISCONNECT = "/api/device/disconnect"
+    private const val WATCHES = "/api/device/watches"
+
+    /** A watch's outcome (GET), its approval request (POST) and the passkey's approval (POST). */
+    fun watchPath(watchEventId: String) = "$WATCHES/${java.net.URLEncoder.encode(watchEventId, "UTF-8")}"
+
+    fun requestApprovalPath(watchEventId: String) = "${watchPath(watchEventId)}/request-approval"
+
+    fun approvePath(watchEventId: String) = "${watchPath(watchEventId)}/approve"
 
     const val MAX_TITLE = 500
     const val MAX_CHANNEL = 200

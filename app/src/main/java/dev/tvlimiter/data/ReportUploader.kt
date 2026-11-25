@@ -2,8 +2,11 @@ package dev.tvlimiter.data
 
 import dev.tvlimiter.domain.Backoff
 import dev.tvlimiter.domain.Moment
+import dev.tvlimiter.domain.OutcomeWire
+import dev.tvlimiter.domain.QueuedReport
 import dev.tvlimiter.domain.TubeGuardWire
 import dev.tvlimiter.domain.UploadOutcome
+import dev.tvlimiter.domain.WatchOutcome
 import java.io.IOException
 
 sealed interface FlushResult {
@@ -28,6 +31,8 @@ class ReportUploader(
     private val now: () -> Moment,
     private val bootCount: () -> Int,
     private val backoff: Backoff = Backoff(),
+    /** Told of each report the backend took, with its id and the outcome the reply carried (null while not decided). */
+    private val onSent: (QueuedReport, String?, WatchOutcome?) -> Unit = { _, _, _ -> },
 ) {
     fun flush(): FlushResult {
         val deviceToken = token() ?: return FlushResult.Done
@@ -53,7 +58,9 @@ class ReportUploader(
             when (UploadOutcome.of(reply.status)) {
                 UploadOutcome.Sent -> {
                     backoff.success()
-                    if (report.correction) queue.removeFirst(report) else queue.markSent(report, TubeGuardWire.watchEventId(reply.body))
+                    val watchEventId = TubeGuardWire.watchEventId(reply.body)
+                    if (report.correction) queue.removeFirst(report) else queue.markSent(report, watchEventId)
+                    onSent(report, watchEventId ?: replaces, OutcomeWire.parse(reply.body))
                 }
                 UploadOutcome.Rejected -> {
                     backoff.success()

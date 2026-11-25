@@ -10,6 +10,9 @@ data class HttpReply(val status: Int, val body: String)
 interface TubeGuardTransport {
     @Throws(IOException::class)
     fun post(path: String, token: String?, body: String): HttpReply
+
+    @Throws(IOException::class)
+    fun get(path: String, token: String?): HttpReply
 }
 
 /**
@@ -17,19 +20,23 @@ interface TubeGuardTransport {
  * It never logs a request: bodies hold video titles and the token is a secret.
  */
 class HttpTransport(private val baseUrl: String) : TubeGuardTransport {
-    override fun post(path: String, token: String?, body: String): HttpReply {
+    override fun post(path: String, token: String?, body: String): HttpReply = send("POST", path, token, body)
+
+    override fun get(path: String, token: String?): HttpReply = send("GET", path, token, null)
+
+    private fun send(method: String, path: String, token: String?, body: String?): HttpReply {
         val connection = URL(baseUrl + path).openConnection() as HttpURLConnection
         try {
-            connection.requestMethod = "POST"
+            connection.requestMethod = method
             connection.connectTimeout = CONNECT_TIMEOUT_MS
             connection.readTimeout = READ_TIMEOUT_MS
-            connection.doOutput = true
+            connection.doOutput = body != null
             // No redirects, so the token can't be sent anywhere but the address in the build.
             connection.instanceFollowRedirects = false
             connection.setRequestProperty("Content-Type", "application/json")
             connection.setRequestProperty("Accept", "application/json")
             if (token != null) connection.setRequestProperty("Authorization", "Bearer $token")
-            connection.outputStream.use { it.write(body.toByteArray()) }
+            if (body != null) connection.outputStream.use { it.write(body.toByteArray()) }
             val status = connection.responseCode
             val stream = if (status in 200..399) connection.inputStream else connection.errorStream
             return HttpReply(status, stream?.use { readCapped(it) } ?: "")
