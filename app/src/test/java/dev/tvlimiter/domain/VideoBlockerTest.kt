@@ -276,4 +276,47 @@ class VideoBlockerTest {
         assertEquals(2, actions.shown.size)
         assertFalse(actions.shown[0].key.sameVideo(actions.shown[1].key))
     }
+
+    @Test
+    fun `a ban made while a fine video plays stops it at the next check`() {
+        val within = outcome("within")
+        blocker.onPlaying(castle)
+        blocker.onReported(castleKey, "w1", within, now)
+        assertTrue(blocker.hasWork())
+
+        answers["w1"] = Fetch.Got(outcome("over", OverKind.CHANNEL_BAN))
+        now += VideoBlocker.RECHECK_EVERY_MS - 1
+        blocker.poll(now)
+        assertEquals("not asked again before the recheck is due", 0, asked.size)
+
+        now += 1
+        blocker.poll(now)
+        assertEquals(listOf("w1"), asked)
+        assertEquals(1, actions.shown.size)
+        assertTrue(actions.pauses > 0)
+    }
+
+    @Test
+    fun `a fine video is no longer rechecked once another video plays`() {
+        blocker.onPlaying(castle)
+        blocker.onReported(castleKey, "w1", outcome("within"), now)
+        blocker.onPlaying(Playing("Cake Time", "Bakers", 300_000))
+        now += VideoBlocker.RECHECK_EVERY_MS
+        blocker.poll(now)
+        assertTrue(asked.isEmpty())
+        assertFalse(blocker.hasWork())
+    }
+
+    @Test
+    fun `a recheck that still finds the video fine keeps it playing and asks again later`() {
+        blocker.onPlaying(castle)
+        blocker.onReported(castleKey, "w1", outcome("within"), now)
+        answers["w1"] = Fetch.Got(outcome("near"))
+        now += VideoBlocker.RECHECK_EVERY_MS
+        blocker.poll(now)
+        now += VideoBlocker.RECHECK_EVERY_MS
+        blocker.poll(now)
+        assertEquals(listOf("w1", "w1"), asked)
+        assertTrue(actions.shown.isEmpty())
+    }
 }

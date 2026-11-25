@@ -33,7 +33,7 @@ class VideoBlockViewModelTest {
     @Test
     fun `the screen says why in a child's words`() {
         val m = model()
-        assertEquals("This video is paused", m.headline)
+        assertEquals("This video is blocked", m.headline)
         assertEquals("This video has a lot of scary or creepy parts.", m.reason)
         assertEquals(VideoStep.CHOOSE, m.step)
     }
@@ -154,12 +154,11 @@ class VideoBlockViewModelTest {
     }
 
     @Test
-    fun `a banned video cannot be allowed by the passkey`() {
+    fun `the passkey plays a video TubeGuard keeps banned, until the TV sleeps`() {
         val m = unlocked()
         m.allowThisVideo(ApproveResult.Banned)
-        assertEquals(0, videoAllowed)
-        assertEquals(VideoStep.ALLOW, m.step)
-        assertTrue(m.notice!!.contains("banned"))
+        assertEquals(1, videoAllowed)
+        assertEquals(VideoStep.RESUME, m.step)
     }
 
     @Test
