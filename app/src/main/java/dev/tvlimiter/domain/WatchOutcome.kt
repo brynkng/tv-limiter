@@ -13,7 +13,21 @@ enum class RequestStatus { PENDING, APPROVED, DENIED }
 data class ApprovalRequest(val id: String, val status: RequestStatus)
 
 /** What made a video over a limit. Only the TV turns this into words, so a child never sees a parent's text. */
-enum class OverKind { VALUE, WORLDVIEW, VIDEO_BAN, CHANNEL_BAN, LEARNED_MATCH, AGE_RESTRICTED, OTHER }
+enum class OverKind {
+    VALUE,
+    WORLDVIEW,
+    VIDEO_BAN,
+    CHANNEL_BAN,
+    LEARNED_MATCH,
+    AGE_RESTRICTED,
+
+    /** Rated for older kids than the child's age limit. */
+    AGE,
+
+    /** A Short while Shorts are turned off. */
+    SHORTS_BLOCKED,
+    OTHER,
+}
 
 /**
  * What TubeGuard says about one watch. [decided] is false while the video is still being identified or checked.
@@ -28,6 +42,8 @@ data class WatchOutcome(
     /** How much of the category the video has: "mild", "some" or "a_lot". */
     val level: String?,
     val request: ApprovalRequest?,
+    /** The age the video is rated for: "all", "7+", "10+", "13+" or "16+". */
+    val ageBand: String? = null,
 ) {
     val isOver: Boolean get() = decided && outcome == "over"
 }
@@ -77,11 +93,14 @@ object OutcomeWire {
                 "channel_ban" -> OverKind.CHANNEL_BAN
                 "learned_match" -> OverKind.LEARNED_MATCH
                 "age_restricted" -> OverKind.AGE_RESTRICTED
+                "age" -> OverKind.AGE
+                "shorts_blocked" -> OverKind.SHORTS_BLOCKED
                 else -> OverKind.OTHER
             },
             value = text("value"),
             level = text("level"),
             request = request,
+            ageBand = text("ageBand"),
         )
     }
 

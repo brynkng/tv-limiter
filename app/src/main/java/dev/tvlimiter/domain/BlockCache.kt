@@ -9,6 +9,9 @@ data class VideoKey(val title: String, val channel: String, val lengthSec: Int?)
 
     fun sameChannel(other: VideoKey): Boolean = channel == other.channel
 
+    /** A YouTube Short, which has no channel of its own to allow. */
+    val isShort: Boolean get() = channel.startsWith(SHORT_CHANNEL_PREFIX)
+
     private fun sameLength(other: Int?): Boolean = when {
         lengthSec == null || other == null -> lengthSec == other
         else -> kotlin.math.abs(lengthSec - other) <= LENGTH_SLACK_SEC
@@ -21,7 +24,16 @@ data class VideoKey(val title: String, val channel: String, val lengthSec: Int?)
 
         fun of(playing: Playing) = of(playing.title, playing.channel, if (playing.lengthMs > 0) ((playing.lengthMs + 500) / 1000).toInt() else null)
 
-        fun of(report: QueuedReport) = of(report.title, report.channel, report.durationSec)
+        fun of(report: QueuedReport) =
+            if (report.short) ofShort(report.durationSec, report.shortKey.orEmpty()) else of(report.title, report.channel, report.durationSec)
+
+        /** A Short has no title or channel, so it is known by its length and its picture's hash. */
+        fun ofShort(lengthSec: Int?, artKey: String) = VideoKey("youtube short", "$SHORT_CHANNEL_PREFIX$artKey", lengthSec?.takeIf { it > 0 })
+
+        fun ofShort(playing: Playing) =
+            ofShort(if (playing.lengthMs > 0) ((playing.lengthMs + 500) / 1000).toInt() else null, playing.art?.key.orEmpty())
+
+        const val SHORT_CHANNEL_PREFIX = "short:"
 
         private fun normalize(text: String) = text.trim().lowercase().replace(Regex("\\s+"), " ")
     }
@@ -37,6 +49,7 @@ data class CachedBlock(
     val value: String?,
     val level: String?,
     val decidedAtMs: Long,
+    val ageBand: String? = null,
 ) {
     val key: VideoKey get() = VideoKey(title, channel, lengthSec)
     val overKind: OverKind get() = OverKind.entries.firstOrNull { it.name == kind } ?: OverKind.OTHER
@@ -67,6 +80,7 @@ class BlockCache(private val store: BlockCacheStore, private val nowMs: () -> Lo
             value = outcome.value,
             level = outcome.level,
             decidedAtMs = nowMs(),
+            ageBand = outcome.ageBand,
         )
         store.save((fresh().filterNot { it.key.sameVideo(key) } + entry).takeLast(MAX_ENTRIES))
     }

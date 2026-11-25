@@ -33,6 +33,8 @@ class ReportUploader(
     private val backoff: Backoff = Backoff(),
     /** Told of each report the backend took, with its id and the outcome the reply carried (null while not decided). */
     private val onSent: (QueuedReport, String?, WatchOutcome?) -> Unit = { _, _, _ -> },
+    /** Told of the Shorts setting a reply carried (true for Block), for the children the report counted for. */
+    private val onShortsSetting: (QueuedReport, Boolean) -> Unit = { _, _ -> },
 ) {
     fun flush(): FlushResult {
         val deviceToken = token() ?: return FlushResult.Done
@@ -60,6 +62,7 @@ class ReportUploader(
                     backoff.success()
                     val watchEventId = TubeGuardWire.watchEventId(reply.body)
                     if (report.correction) queue.removeFirst(report) else queue.markSent(report, watchEventId)
+                    TubeGuardWire.shortsBlocked(reply.body)?.let { onShortsSetting(report, it) }
                     onSent(report, watchEventId ?: replaces, OutcomeWire.parse(reply.body))
                 }
                 UploadOutcome.Rejected -> {

@@ -16,14 +16,29 @@ class TubeGuardLinkRepository(private val store: JsonFileStore<TubeGuardLink>) {
 
     fun current(): TubeGuardLink = synchronized(lock) { cached ?: store.read().also { cached = it } }
 
-    fun connect(deviceId: String, token: String, children: List<TubeGuardChild>) =
-        save(TubeGuardLink(LinkStatus.CONNECTED, deviceId, token, children.map { it.name }, children))
+    fun connect(deviceId: String, token: String, children: List<TubeGuardChild>, shortsBlocked: Boolean = false) =
+        save(TubeGuardLink(LinkStatus.CONNECTED, deviceId, token, children.map { it.name }, children, shortsBlocked))
 
-    /** The children the backend listed in its latest reply. Ignored once this TV is no longer connected. */
-    fun updateChildren(children: List<TubeGuardChild>) = synchronized(lock) {
+    /**
+     * The children the backend listed in its latest reply, and the Shorts setting for the whole TV when the reply
+     * carried it. Ignored once this TV is no longer connected.
+     */
+    fun updateChildren(children: List<TubeGuardChild>, shortsBlocked: Boolean? = null) = synchronized(lock) {
         val now = current()
-        if (now.status == LinkStatus.CONNECTED && (now.childList != children || now.children != children.map { it.name })) {
-            save(now.copy(children = children.map { it.name }, childList = children))
+        val shorts = shortsBlocked ?: now.shortsBlocked
+        if (now.status == LinkStatus.CONNECTED && (now.childList != children || now.children != children.map { it.name } || now.shortsBlocked != shorts)) {
+            save(now.copy(children = children.map { it.name }, childList = children, shortsBlocked = shorts))
+        }
+    }
+
+    /** A report reply named the Shorts setting for [childId], or for the whole TV when the watch had no linked child. */
+    fun updateShorts(childId: String?, blocked: Boolean) = synchronized(lock) {
+        val now = current()
+        if (now.status != LinkStatus.CONNECTED) return@synchronized
+        if (childId == null) {
+            if (now.shortsBlocked != blocked) save(now.copy(shortsBlocked = blocked))
+        } else if (now.childList.any { it.id == childId && it.shortsBlocked != blocked }) {
+            save(now.copy(childList = now.childList.map { if (it.id == childId) it.copy(shortsBlocked = blocked) else it }))
         }
     }
 

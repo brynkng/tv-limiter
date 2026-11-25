@@ -31,9 +31,11 @@ object BlockWords {
         "news_tragedies" to "news and tragedies",
     )
 
-    fun reason(outcome: WatchOutcome): String = reason(outcome.kind, outcome.value, outcome.level)
+    fun reason(outcome: WatchOutcome): String = reason(outcome.kind, outcome.value, outcome.level, outcome.ageBand)
 
-    fun reason(kind: OverKind?, value: String?, level: String?): String = when (kind) {
+    fun reason(kind: OverKind?, value: String?, level: String?, ageBand: String? = null): String = when (kind) {
+        OverKind.AGE -> ageBand?.takeIf { it != "all" }?.let { "This video is for older kids ($it)." } ?: "This video is for older kids."
+        OverKind.SHORTS_BLOCKED -> "Shorts are turned off."
         OverKind.VALUE -> categories[value]?.let { "This video has ${amount(level)}$it." } ?: FALLBACK
         OverKind.WORLDVIEW -> topics[value]?.let { "This video is about $it, which is turned off." } ?: FALLBACK
         OverKind.VIDEO_BAN -> "This video is blocked."

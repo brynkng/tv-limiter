@@ -1,8 +1,18 @@
 package dev.tvlimiter.domain
 
 /** The video the block screen is covering. [watchEventId] is TubeGuard's id for the watch, when it is known. */
-data class BlockedVideo(val key: VideoKey, val kind: OverKind, val value: String?, val level: String?, val watchEventId: String?) {
-    val reason: String get() = BlockWords.reason(kind, value, level)
+data class BlockedVideo(
+    val key: VideoKey,
+    val kind: OverKind,
+    val value: String?,
+    val level: String?,
+    val watchEventId: String?,
+    val ageBand: String? = null,
+) {
+    val reason: String get() = BlockWords.reason(kind, value, level, ageBand)
+
+    /** A YouTube Short. The block screen then tells the child how to leave Shorts and offers no channel allowance. */
+    val isShort: Boolean get() = key.isShort || kind == OverKind.SHORTS_BLOCKED
 }
 
 /** What the blocker does to the TV. Implemented against the real media session and screen, and by fakes in tests. */
@@ -31,6 +41,8 @@ fun interface OutcomeSource {
  * - A video found fine is asked about again every [RECHECK_EVERY_MS] while it is still the one on screen, so a
  *   ban or a stricter setting made while it plays stops it then.
  * - A parent's allowance (this video, or this channel, until the TV sleeps) lifts a block.
+ * - A Short (no title) is blocked at once, from the Shorts setting the TV already knows ([shortsBlocked]), once the
+ *   tracker has found it to be one ([noteShort]); a replay of that Short is covered again at once.
  *
  * It is safe to call from the main thread ([onPlaying]) and the worker thread ([onReported], [poll]).
  */
@@ -43,6 +55,8 @@ class VideoBlocker(
     private val pollEveryMs: Long = POLL_EVERY_MS,
     private val pollForMs: Long = POLL_FOR_MS,
     private val recheckEveryMs: Long = RECHECK_EVERY_MS,
+    /** Whether Shorts are blocked for whoever is watching now. Read each time, so a setting TubeGuard just sent counts. */
+    private val shortsBlocked: () -> Boolean = { false },
 ) {
     private class Pending(val key: VideoKey, val watchEventId: String, val startedMs: Long) {
         var lastAskedMs: Long? = null
@@ -55,6 +69,9 @@ class VideoBlocker(
     private var fine: Pending? = null
     private var current: VideoKey? = null
 
+    /** Shorts the tracker has found to be Shorts, so a replay of one is covered at once. */
+    private val shorts = LinkedHashSet<VideoKey>()
+
     /** The video the block screen covers now, or the last one it covered. */
     @Volatile var blocked: BlockedVideo? = null
         private set
@@ -62,11 +79,31 @@ class VideoBlocker(
     /** Called whenever YouTube's session is read. [playing] is null when nothing is playing, paused included. */
     fun onPlaying(playing: Playing?) {
         if (playing == null) return
+        if (playing.couldBeShort) return onShortPlaying(VideoKey.ofShort(playing))
         val key = VideoKey.of(playing)
         synchronized(lock) { current = key }
         if (parentMode() || allowances.allows(key)) return
         val hit = cache.find(key) ?: return
-        block(key, hit.overKind, hit.value, hit.level, hit.watchEventId)
+        block(key, hit.overKind, hit.value, hit.level, hit.watchEventId, hit.ageBand)
+    }
+
+    /** The tracker found [key] to be a Short: untitled for long enough that it is not a regular video loading. */
+    fun noteShort(key: VideoKey) {
+        synchronized(lock) {
+            shorts.removeAll { it.sameVideo(key) }
+            shorts += key
+            while (shorts.size > MAX_SHORTS) shorts.remove(shorts.first())
+        }
+    }
+
+    private fun onShortPlaying(key: VideoKey) {
+        val known = synchronized(lock) {
+            current = key
+            shorts.any { it.sameVideo(key) }
+        }
+        // An untitled item that has not yet proved to be a Short is left alone: a regular video is untitled for a moment.
+        if (!known || parentMode() || allowances.allows(key) || !shortsBlocked()) return
+        block(key, OverKind.SHORTS_BLOCKED, null, null, null, null)
     }
 
     /** A report was taken. [outcome] is what the reply carried, null when the video is not decided yet. */
@@ -147,22 +184,25 @@ class VideoBlocker(
         // The child may have moved on to another video while it was being checked.
         val playingNow = synchronized(lock) { current }
         if (playingNow != null && !playingNow.sameVideo(key)) return
-        block(key, outcome.kind ?: OverKind.OTHER, outcome.value, outcome.level, watchEventId)
+        block(key, outcome.kind ?: OverKind.OTHER, outcome.value, outcome.level, watchEventId, outcome.ageBand)
     }
 
-    private fun block(key: VideoKey, kind: OverKind, value: String?, level: String?, watchEventId: String?) {
-        val video = BlockedVideo(key, kind, value, level, watchEventId)
+    private fun block(key: VideoKey, kind: OverKind, value: String?, level: String?, watchEventId: String?, ageBand: String?) {
+        val video = BlockedVideo(key, kind, value, level, watchEventId, ageBand)
         val covered = blocked
         blocked = video
         // Pausing again is harmless and stops a video the child started behind the cover.
         actions.pause()
         // A screen already up for another video is told about this one.
-        if (!actions.isShowing() || covered?.key?.sameVideo(key) != true) actions.show(video)
+        // So is one that has only now learned TubeGuard's id for the watch (a Short blocked before the report was answered).
+        val learnedId = covered?.watchEventId == null && watchEventId != null
+        if (!actions.isShowing() || covered?.key?.sameVideo(key) != true || learnedId) actions.show(video)
     }
 
     companion object {
         const val POLL_EVERY_MS = 3_000L
         const val POLL_FOR_MS = 90_000L
         const val RECHECK_EVERY_MS = 15_000L
+        private const val MAX_SHORTS = 50
     }
 }

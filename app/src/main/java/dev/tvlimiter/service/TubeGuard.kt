@@ -12,6 +12,7 @@ import dev.tvlimiter.BuildConfig
 import dev.tvlimiter.data.BlockCacheRepository
 import dev.tvlimiter.data.FlushResult
 import dev.tvlimiter.data.HttpTransport
+import dev.tvlimiter.data.PinRepository
 import dev.tvlimiter.data.ProfilesRepository
 import dev.tvlimiter.data.ReportQueueRepository
 import dev.tvlimiter.data.ReportUploader
@@ -20,14 +21,18 @@ import dev.tvlimiter.data.TubeGuardTransport
 import dev.tvlimiter.domain.Allowances
 import dev.tvlimiter.domain.BlockCache
 import dev.tvlimiter.domain.Fetch
+import dev.tvlimiter.domain.Gate
 import dev.tvlimiter.domain.Moment
 import dev.tvlimiter.domain.OutcomeWire
 import dev.tvlimiter.domain.ParentMode
 import dev.tvlimiter.domain.PairResult
 import dev.tvlimiter.domain.ProfileLinks
+import dev.tvlimiter.domain.Shorts
 import dev.tvlimiter.domain.TubeGuardChild
 import dev.tvlimiter.domain.TubeGuardWire
 import dev.tvlimiter.domain.UploadOutcome
+import dev.tvlimiter.domain.Viewer
+import dev.tvlimiter.domain.ViewerGate
 import dev.tvlimiter.domain.VideoBlocker
 import dev.tvlimiter.domain.VideoKey
 import dev.tvlimiter.domain.Watch
@@ -80,8 +85,8 @@ object TubeGuard {
         ProfileLinks.childIdFor(profileId, ProfilesRepository.get(context).profiles(), TubeGuardLinkRepository.get(context).current().childList)
 
     /** Keeps the children TubeGuard listed and links the only profile to the only child. */
-    private fun childrenListed(context: Context, children: List<TubeGuardChild>) {
-        TubeGuardLinkRepository.get(context).updateChildren(children)
+    private fun childrenListed(context: Context, children: List<TubeGuardChild>, shortsBlocked: Boolean? = null) {
+        TubeGuardLinkRepository.get(context).updateChildren(children, shortsBlocked)
         ProfilesRepository.get(context).autoLink(children)
     }
 
@@ -105,6 +110,7 @@ object TubeGuard {
             onSent = { report, watchEventId, outcome ->
                 blocker(context).onReported(VideoKey.of(report), watchEventId, outcome, SystemClock.elapsedRealtime())
             },
+            onShortsSetting = { report, blocked -> link.updateShorts(report.childId, blocked) },
         ).also { uploader = it }
         try {
             when (val result = sender.flush()) {
@@ -142,10 +148,23 @@ object TubeGuard {
             cache = BlockCache(BlockCacheRepository.get(app), System::currentTimeMillis),
             allowances = Allowances.shared,
             parentMode = { ParentMode.shared.active },
+            shortsBlocked = { shortsBlocked(app) },
             source = { id -> fetchOutcome(app, id) },
             actions = AndroidBlockActions(app),
         ).also { blockerInstance = it }
     }
+
+    /** The profile watching now: the one picked, or the only one on a TV that shows no picker. Null while nobody has picked. */
+    fun activeProfileId(context: Context): String? {
+        val gate = ViewerGate.decide(Viewer.shared.current, ParentMode.shared.active, ProfilesRepository.get(context).profiles()) {
+            PinRepository.guard(context, it).hasPin()
+        }
+        return (gate as? Gate.CountFor)?.profileId
+    }
+
+    /** Whether Shorts are blocked for whoever is watching, by the setting TubeGuard last sent this TV. */
+    fun shortsBlocked(context: Context): Boolean =
+        Shorts.blocked(activeProfileId(context), ProfilesRepository.get(context).profiles(), TubeGuardLinkRepository.get(context).current())
 
     /** Asks about undecided watches, and again about the fine video on screen. Called every few seconds by the media listener. */
     fun pollBlocks(context: Context) {
@@ -232,14 +251,18 @@ object TubeGuard {
         val token = TubeGuardLinkRepository.get(context).current().deviceToken
         val body = TubeGuardWire.heartbeatBody(PermissionStatus.hasNotificationAccess(context), BuildConfig.VERSION_NAME)
         var children: List<TubeGuardChild>? = null
+        var shortsBlocked: Boolean? = null
         val outcome = try {
             val reply = transport.post(TubeGuardWire.HEARTBEAT, token, body)
-            if (reply.status in 200..299) children = TubeGuardWire.children(reply.body)
+            if (reply.status in 200..299) {
+                children = TubeGuardWire.children(reply.body)
+                shortsBlocked = TubeGuardWire.shortsBlocked(reply.body)
+            }
             UploadOutcome.of(reply.status)
         } catch (e: IOException) {
             UploadOutcome.Retry
         }
-        children?.let { childrenListed(context, it) }
+        children?.let { childrenListed(context, it, shortsBlocked) }
         when (outcome) {
             UploadOutcome.Disconnected -> removedByParent(context)
             UploadOutcome.Retry -> return false
@@ -267,7 +290,7 @@ object TubeGuard {
         val app = context.applicationContext
         // Reports queued under an earlier pairing belong to that family.
         ReportQueueRepository.get(app).clear()
-        TubeGuardLinkRepository.get(app).connect(paired.deviceId, paired.deviceToken, paired.children)
+        TubeGuardLinkRepository.get(app).connect(paired.deviceId, paired.deviceToken, paired.children, paired.shortsBlocked)
         ProfilesRepository.get(app).autoLink(paired.children)
         schedule(app)
         TrackingService.refreshNotice(app)

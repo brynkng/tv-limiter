@@ -25,6 +25,11 @@ data class QueuedReport(
     val childId: String? = null,
     /** True when this changes the length of a watch already reported, so the backend corrects it instead of adding one. */
     val correction: Boolean = false,
+    /** True for a YouTube Short, which has no title or channel: it carries [image], its still picture in base64, instead. */
+    val short: Boolean = false,
+    val image: String? = null,
+    /** The hash of the Short's picture, to tell it from the next one. Never sent. */
+    val shortKey: String? = null,
 ) {
     /** Which watch this is, among the ones from this boot. A correction and the report it corrects share it. */
     val key: String get() = "$bootCount:$startElapsedMs"
@@ -36,7 +41,12 @@ data class SentReport(val key: String, val watchEventId: String)
 
 /** What the TubeGuard backend sends back for a pairing request. */
 sealed interface PairResult {
-    data class Paired(val deviceId: String, val deviceToken: String, val children: List<TubeGuardChild>) : PairResult {
+    data class Paired(
+        val deviceId: String,
+        val deviceToken: String,
+        val children: List<TubeGuardChild>,
+        val shortsBlocked: Boolean = false,
+    ) : PairResult {
         override fun toString() = "Paired(children=${children.size})"
     }
 
@@ -128,8 +138,14 @@ object TubeGuardWire {
         val sameBoot = report.bootCount == currentBootCount
         val age = if (sameBoot) now.elapsedMs - report.startElapsedMs else now.wallMs - report.startWallMs
         return buildJsonObject {
-            put("title", report.title.take(MAX_TITLE))
-            put("channel", report.channel.ifBlank { UNKNOWN_CHANNEL }.take(MAX_CHANNEL))
+            if (report.short) {
+                // A Short has no title or channel; its length and a small still picture are all that is known of it.
+                put("kind", "short")
+                report.image?.let { put("image", it) }
+            } else {
+                put("title", report.title.take(MAX_TITLE))
+                put("channel", report.channel.ifBlank { UNKNOWN_CHANNEL }.take(MAX_CHANNEL))
+            }
             put("app", "youtube")
             put("ageMs", age.coerceAtLeast(0))
             put("bootCount", report.bootCount)
@@ -149,13 +165,16 @@ object TubeGuardWire {
 
     fun queued(watch: Watch, bootCount: Int, childId: String? = null) = QueuedReport(
         title = watch.title,
-        channel = watch.channel.ifBlank { UNKNOWN_CHANNEL },
+        channel = if (watch.isShort) "" else watch.channel.ifBlank { UNKNOWN_CHANNEL },
         durationSec = watch.durationSec,
         startElapsedMs = watch.start.elapsedMs,
         startWallMs = watch.start.wallMs,
         bootCount = bootCount,
         childId = childId,
         correction = watch.correction,
+        short = watch.isShort,
+        image = watch.short?.jpegBase64,
+        shortKey = watch.short?.key,
     )
 
     fun pairResult(status: Int, body: String): PairResult = when {
@@ -183,11 +202,18 @@ object TubeGuardWire {
         null
     }
 
+    /** The Shorts setting for the whole TV in a reply, true for Block, or null when the reply doesn't carry it (an older backend). */
+    fun shortsBlocked(body: String): Boolean? = try {
+        Json.parseToJsonElement(body).jsonObject["shorts"]?.jsonPrimitive?.contentOrNull?.let { it == "block" }
+    } catch (e: Exception) {
+        null
+    }
+
     private fun childrenIn(root: JsonObject): List<TubeGuardChild>? = (root["children"] as? JsonArray)?.mapNotNull {
         val child = it as? JsonObject ?: return@mapNotNull null
         val id = child["id"]?.jsonPrimitive?.contentOrNull?.takeIf { v -> v.isNotEmpty() } ?: return@mapNotNull null
         val name = child["name"]?.jsonPrimitive?.contentOrNull.orEmpty()
-        TubeGuardChild(id, name)
+        TubeGuardChild(id, name, shortsBlocked = child["shorts"]?.jsonPrimitive?.contentOrNull == "block")
     }
 
     private fun parsePaired(body: String): PairResult.Paired? = try {
@@ -195,7 +221,8 @@ object TubeGuardWire {
         val token = root["deviceToken"]?.jsonPrimitive?.contentOrNull
         val id = root["deviceId"]?.jsonPrimitive?.contentOrNull
         val children = childrenIn(root) ?: emptyList()
-        if (token.isNullOrEmpty() || id.isNullOrEmpty()) null else PairResult.Paired(id, token, children)
+        val shorts = root["shorts"]?.jsonPrimitive?.contentOrNull == "block"
+        if (token.isNullOrEmpty() || id.isNullOrEmpty()) null else PairResult.Paired(id, token, children, shorts)
     } catch (e: Exception) {
         null
     }

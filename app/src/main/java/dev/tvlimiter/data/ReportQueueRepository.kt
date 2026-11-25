@@ -37,12 +37,19 @@ class ReportQueueRepository(private val store: JsonFileStore<ReportQueueFile>) {
      */
     fun add(report: QueuedReport) = synchronized(lock) {
         val file = load()
-        if (!report.correction) return@synchronized save(file.copy(reports = (file.reports + report).takeLast(MAX_REPORTS)))
+        if (!report.correction) return@synchronized save(file.copy(reports = limitShorts(file.reports + report).takeLast(MAX_REPORTS)))
         val waiting = file.reports.indexOfFirst { it.key == report.key }
         when {
             waiting >= 0 -> save(file.copy(reports = file.reports.mapIndexed { i, r -> if (i == waiting) r.copy(durationSec = report.durationSec) else r }))
             file.sent.any { it.key == report.key } -> save(file.copy(reports = (file.reports + report).takeLast(MAX_REPORTS)))
         }
+    }
+
+    /** Each Short carries a picture, so only the newest [MAX_SHORTS] are kept, which keeps the file small while the TV is offline. */
+    private fun limitShorts(reports: List<QueuedReport>): List<QueuedReport> {
+        var extra = reports.count { it.short } - MAX_SHORTS
+        if (extra <= 0) return reports
+        return reports.filter { !(it.short && extra-- > 0) }
     }
 
     /**
@@ -75,6 +82,9 @@ class ReportQueueRepository(private val store: JsonFileStore<ReportQueueFile>) {
 
     companion object {
         const val MAX_REPORTS = 500
+
+        /** Reports of Shorts kept while waiting for upload. */
+        const val MAX_SHORTS = 30
 
         /** Corrections come within minutes of a report, so only the last few ids are worth keeping. */
         const val MAX_SENT = 20

@@ -8,13 +8,10 @@ import android.media.session.PlaybackState
 import android.os.Handler
 import android.os.Looper
 import android.service.notification.NotificationListenerService
-import dev.tvlimiter.data.PinRepository
-import dev.tvlimiter.data.ProfilesRepository
-import dev.tvlimiter.domain.Gate
 import dev.tvlimiter.domain.ParentMode
 import dev.tvlimiter.domain.Playing
-import dev.tvlimiter.domain.Viewer
-import dev.tvlimiter.domain.ViewerGate
+import dev.tvlimiter.domain.Shorts
+import dev.tvlimiter.domain.VideoKey
 import dev.tvlimiter.domain.WatchTracker
 import dev.tvlimiter.domain.YouTubePackages
 
@@ -97,18 +94,13 @@ open class WatchListener : NotificationListenerService() {
         if (!connected || !TubeGuard.enabled) return
         val suppressed = ParentMode.shared.active || !TubeGuard.isConnected(this)
         val playing = callbacks.keys.firstNotNullOfOrNull { playing(it) }
-        tracker.update(TubeGuard.now(), playing, suppressed, if (suppressed) null else activeProfile()).forEach { TubeGuard.submit(this, it) }
+        val watches = tracker.update(TubeGuard.now(), playing, suppressed, if (suppressed) null else TubeGuard.activeProfileId(this))
+        watches.forEach { TubeGuard.submit(this, it) }
+        // A Short is known to be one only once the tracker has seen it play untitled; from then on a replay is covered at once.
+        if (!suppressed) watches.filter { it.isShort }.forEach { w -> w.short?.let { TubeGuard.blocker(this).noteShort(VideoKey.ofShort(w.durationSec, it.key)) } }
         // A video already found over a limit is blocked as soon as it plays. Parent mode and an unpaired TV block nothing.
         if (!suppressed) TubeGuard.blocker(this).onPlaying(playing)
         TubeGuard.pollBlocks(this)
-    }
-
-    /** The profile watching now: the one picked, or the only one on a TV that shows no picker. Null while nobody has picked. */
-    private fun activeProfile(): String? {
-        val gate = ViewerGate.decide(Viewer.shared.current, ParentMode.shared.active, ProfilesRepository.get(this).profiles()) {
-            PinRepository.guard(this, it).hasPin()
-        }
-        return (gate as? Gate.CountFor)?.profileId
     }
 
     /** Pauses YouTube. Its TV app takes pause and play from other apps but not stop, and "next" would start an unchecked video. */
@@ -124,9 +116,14 @@ open class WatchListener : NotificationListenerService() {
     private fun playing(controller: MediaController): Playing? {
         if (controller.playbackState?.state != PlaybackState.STATE_PLAYING) return null
         val metadata = controller.metadata ?: return null
-        val title = metadata.getString(MediaMetadata.METADATA_KEY_TITLE) ?: return null
+        val title = metadata.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty()
         val channel = metadata.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty()
-        return Playing(title, channel, metadata.getLong(MediaMetadata.METADATA_KEY_DURATION))
+        val length = metadata.getLong(MediaMetadata.METADATA_KEY_DURATION)
+        // YouTube's Shorts have no title or artist, only a length and a still picture. Regular videos are also
+        // untitled for a moment, so the tracker waits before it calls an untitled item a Short.
+        val art = if (title.isBlank() && Shorts.couldBeShort(length)) ShortArtReader.read(metadata) else null
+        if (title.isBlank() && art == null) return null
+        return Playing(title, channel, length, art)
     }
 
     companion object {

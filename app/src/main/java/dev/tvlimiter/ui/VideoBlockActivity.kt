@@ -41,6 +41,7 @@ class VideoBlockActivity : Activity() {
     private lateinit var pad: PinPadView
     private lateinit var allowPanel: LinearLayout
     private lateinit var pickButton: View
+    private lateinit var allowChannelButton: View
     private var finishing = false
 
     private val poll = object : Runnable {
@@ -68,7 +69,7 @@ class VideoBlockActivity : Activity() {
         setIntent(intent)
         // The listener may ask again for the video already covered; keep any passkey entry in progress.
         val now = TubeGuard.blocker(this).blocked ?: return
-        if (::model.isInitialized && now.key.sameVideo(model.video.key)) return
+        if (::model.isInitialized && now.key.sameVideo(model.video.key) && now.watchEventId == model.video.watchEventId) return
         start()
     }
 
@@ -120,6 +121,8 @@ class VideoBlockActivity : Activity() {
 
     private fun render() {
         if (model.step == VideoStep.RESUME) return resume()
+        (pickButton as? TextView)?.text = model.pickAnotherLabel
+        allowChannelButton.visibility = if (model.canAllowChannel) View.VISIBLE else View.GONE
         headline.text = model.headline
         reason.text = model.reason
         choosePanel.visibility = if (model.step == VideoStep.PIN || model.step == VideoStep.ALLOW) View.GONE else View.VISIBLE
@@ -151,6 +154,7 @@ class VideoBlockActivity : Activity() {
         val spent = TimeBar(this).apply { exhausted = true }
 
         pickButton = tvButton("Pick another video") { pickAnother() }
+        allowChannelButton = tvButton("Allow this channel until the TV sleeps") { model.allowThisChannel(); render() }.also { it.margins(this@VideoBlockActivity, top = 16) }
         val home = tvButton("Go home") { goHome() }
         askButton = tvButton("Ask a parent") { askParent() }
         parentButton = tvButton("I'm a parent") {
@@ -191,7 +195,7 @@ class VideoBlockActivity : Activity() {
         allowPanel = column(Gravity.CENTER_HORIZONTAL).apply {
             clipChildren = false
             addView(tvButton("Allow this video") { allowThisVideo() })
-            addView(tvButton("Allow this channel until the TV sleeps") { model.allowThisChannel(); render() }.also { it.margins(this@VideoBlockActivity, top = 16) })
+            addView(allowChannelButton)
             addView(tvButton("Parent mode until the TV sleeps") { model.parentMode(); render() }.also { it.margins(this@VideoBlockActivity, top = 16) })
         }
 
@@ -255,7 +259,7 @@ class VideoBlockActivity : Activity() {
 
     /** The cover comes off the paused player; YouTube is still paused behind it. */
     private fun pickAnother() {
-        Toast.makeText(applicationContext, "Press Back to choose another video.", Toast.LENGTH_LONG).show()
+        Toast.makeText(applicationContext, model.pickAnotherHint, Toast.LENGTH_LONG).show()
         finishScreen()
     }
 

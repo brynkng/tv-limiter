@@ -4,7 +4,16 @@ package dev.tvlimiter.domain
 data class Moment(val elapsedMs: Long, val wallMs: Long)
 
 /** What YouTube's media session says is playing right now. */
-data class Playing(val title: String, val channel: String, val lengthMs: Long)
+data class Playing(
+    val title: String,
+    val channel: String,
+    val lengthMs: Long,
+    /** The item's still picture, read only while it has no title and could be a Short. */
+    val art: ShortArt? = null,
+) {
+    /** No title, a length a Short can have, and a picture to tell it apart: a Short once it has played long enough. */
+    val couldBeShort: Boolean get() = title.isBlank() && art != null && Shorts.couldBeShort(lengthMs)
+}
 
 /**
  * One video the child watched, ready to be reported. [start] is when it first played. A [correction] is a
@@ -18,7 +27,11 @@ data class Watch(
     val correction: Boolean = false,
     /** The TV Limiter profile that was active when the watch started, or null when none was. */
     val profileId: String? = null,
-)
+    /** Set for a YouTube Short, which has no title or channel: its still picture. */
+    val short: ShortArt? = null,
+) {
+    val isShort: Boolean get() = short != null
+}
 
 /**
  * Turns what YouTube's media session says into watches. It is fed the current state every few
@@ -35,6 +48,9 @@ data class Watch(
  * - If the first report carried an ad's length, a length at least [Rules.correctionMs] longer for the same
  *   watch is handed back once more as a correction, at most [Rules.maxCorrections] times. A mid-roll ad is
  *   shorter than its video, so it never causes one.
+ * - An item with no title, [Shorts.MAX_LENGTH_MS] long or less, that has played [Rules.minPlayMs] and is still untitled
+ *   is a Short. Each Short (its length and picture) is one watch, reported as soon as it has played that long and
+ *   not when it ends, since Shorts play back to back. A video whose title arrives within that time is not a Short.
  * - Nothing that plays while [update] says the report is suppressed (parent mode, or not paired) counts.
  */
 class WatchTracker(private val rules: Rules = Rules()) {
@@ -51,7 +67,14 @@ class WatchTracker(private val rules: Rules = Rules()) {
         val maxCreditMs: Long = 15_000,
     )
 
-    private class Open(val key: String, val title: String, val channel: String, val start: Moment, val profileId: String?) {
+    private class Open(
+        val key: String,
+        val title: String,
+        val channel: String,
+        val start: Moment,
+        val profileId: String?,
+        val art: ShortArt? = null,
+    ) {
         var lastPlayedMs = start.elapsedMs
         var playedMs = 0L
 
@@ -75,14 +98,23 @@ class WatchTracker(private val rules: Rules = Rules()) {
         creditPlay(now.elapsedMs)
         lastUpdateMs = now.elapsedMs
         val video = playing?.takeIf { it.title.isNotBlank() }
+        val short = playing?.takeIf { it.couldBeShort }
         if (suppressed) {
             // What was being played while a parent was watching is not the child's.
             current?.let { if (!it.reported) open.remove(it.key) }
             current = null
-        } else if (video == null) {
+        } else if (video == null && short == null) {
             current = null
+        } else if (video == null) {
+            val art = short!!.art!!
+            val key = "short\u0000${seconds(short.lengthMs)}\u0000${art.key}"
+            val watch = open.getOrPut(key) { Open(key, "", "", now, profileId, art) }
+            watch.longestMs = maxOf(watch.longestMs, short.lengthMs)
+            watch.itemMs = short.lengthMs
+            watch.lastPlayedMs = now.elapsedMs
+            current = watch
         } else {
-            val key = keyOf(video.title, video.channel)
+            val key = keyOf(video!!.title, video.channel)
             val watch = open.getOrPut(key) { Open(key, video.title.trim(), video.channel.trim(), now, profileId) }
             watch.longestMs = maxOf(watch.longestMs, video.lengthMs)
             watch.itemMs = video.lengthMs
@@ -118,14 +150,15 @@ class WatchTracker(private val rules: Rules = Rules()) {
             val over = w !== current && idleMs >= rules.joinGapMs
             if (!w.reported) {
                 val quietFor = if (w.longestMs >= rules.longMs) rules.joinGapMs else rules.shortQuietMs
-                val soon = w.longPlayedMs >= rules.minPlayMs
+                // A Short is reported after the same play as a long video, since it would be over before it went quiet.
+                val soon = if (w.art != null) w.playedMs >= rules.minPlayMs else w.longPlayedMs >= rules.minPlayMs
                 val due = everything || soon || (w !== current && idleMs >= quietFor)
                 if (w.playedMs >= rules.minPlayMs && due) {
                     w.reported = true
                     w.reportedMs = w.longestMs
-                    out += Watch(w.title, w.channel, seconds(w.longestMs), w.start, profileId = w.profileId)
+                    out += Watch(w.title, w.channel, seconds(w.longestMs), w.start, profileId = w.profileId, short = w.art)
                 }
-            } else if (w.corrections < rules.maxCorrections && w.longestMs >= w.reportedMs + rules.correctionMs) {
+            } else if (w.art == null && w.corrections < rules.maxCorrections && w.longestMs >= w.reportedMs + rules.correctionMs) {
                 w.corrections++
                 w.reportedMs = w.longestMs
                 out += Watch(w.title, w.channel, seconds(w.longestMs), w.start, correction = true, profileId = w.profileId)

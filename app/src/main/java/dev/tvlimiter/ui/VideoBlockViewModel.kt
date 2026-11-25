@@ -59,6 +59,13 @@ class VideoBlockViewModel(
         private set
 
     val headline: String get() = BlockWords.HEADLINE
+
+    /** In Shorts there is no other video to pick: the child leaves Shorts with Back. */
+    val pickAnotherLabel: String get() = if (video.isShort) "Leave Shorts" else "Pick another video"
+    val pickAnotherHint: String get() = if (video.isShort) "Press Back to leave Shorts." else "Press Back to choose another video."
+
+    /** A Short has no channel to allow, so the parent is not offered it. */
+    val canAllowChannel: Boolean get() = !video.isShort
     val reason: String get() = video.reason
 
     /** Whether the polling clock should be running. */
@@ -124,7 +131,7 @@ class VideoBlockViewModel(
     }
 
     fun allowThisChannel() {
-        if (step != VideoStep.ALLOW) return
+        if (step != VideoStep.ALLOW || !canAllowChannel) return
         allowChannel()
         resume()
     }
