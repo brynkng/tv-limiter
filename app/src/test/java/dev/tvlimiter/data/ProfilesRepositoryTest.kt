@@ -83,4 +83,22 @@ class ProfilesRepositoryTest {
         LimitsRepository(childStore).delete(Limit.appLimitId("yt"))
         assertEquals(2, shared.all().size)
     }
+
+    @Test
+    fun `a report reply's Shorts setting updates one child, or the whole TV when the watch had no linked child`() {
+        val link = TubeGuardLinkRepository(
+            JsonFileStore(java.io.File(folder.root, "tubeguard.json"), dev.tvlimiter.domain.TubeGuardLink.serializer()) { dev.tvlimiter.domain.TubeGuardLink() },
+        )
+        link.connect("d", "t", listOf(TubeGuardChild("c1", "Ana"), TubeGuardChild("c2", "Ben")))
+        link.updateShorts("c1", true)
+        assertEquals(listOf(true, false), link.current().childList.map { it.shortsBlocked })
+        assertFalse(link.current().shortsBlocked)
+        link.updateShorts(null, true)
+        assertTrue(link.current().shortsBlocked)
+        // A check-in that doesn't carry the TV-wide setting leaves it alone.
+        link.updateChildren(listOf(TubeGuardChild("c1", "Ana", true)))
+        assertTrue(link.current().shortsBlocked)
+        link.updateChildren(listOf(TubeGuardChild("c1", "Ana", true)), shortsBlocked = false)
+        assertFalse(link.current().shortsBlocked)
+    }
 }

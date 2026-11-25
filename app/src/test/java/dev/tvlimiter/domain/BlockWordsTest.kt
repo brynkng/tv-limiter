@@ -51,4 +51,17 @@ class BlockWordsTest {
         assertFalse(text.contains("monster"))
         assertFalse(text.contains("limit"))
     }
+
+    @Test
+    fun `an age block tells the child the video is for older kids, with the age`() {
+        assertEquals("This video is for older kids (13+).", BlockWords.reason(OverKind.AGE, null, null, "13+"))
+        assertEquals("This video is for older kids (16+).", BlockWords.reason(OverKind.AGE, null, null, "16+"))
+        assertEquals("This video is for older kids (10+).", BlockWords.reason(WatchOutcome(true, "over", OverKind.AGE, null, null, null, "10+")))
+        assertEquals("This video is for older kids.", BlockWords.reason(OverKind.AGE, null, null, null))
+    }
+
+    @Test
+    fun `a Short says Shorts are turned off`() {
+        assertEquals("Shorts are turned off.", BlockWords.reason(OverKind.SHORTS_BLOCKED, null, null))
+    }
 }

@@ -76,4 +76,14 @@ class OutcomeWireTest {
         assertEquals("/api/device/watches/abc/approve", TubeGuardWire.approvePath("abc"))
         assertEquals("/api/device/watches/a%2Fb", TubeGuardWire.watchPath("a/b"))
     }
+
+    @Test
+    fun `an age block and a Shorts block are read, with the age band`() {
+        val age = OutcomeWire.parse("""{"outcome":{"decided":true,"outcome":"over","kind":"age","value":"age","level":null,"ageBand":"13+","request":null}}""")!!
+        assertEquals(OverKind.AGE, age.kind)
+        assertEquals("13+", age.ageBand)
+        assertTrue(age.isOver)
+        val shorts = OutcomeWire.parse("""{"outcome":{"decided":true,"outcome":"over","kind":"shorts_blocked","value":"shorts","level":null,"ageBand":null,"request":null}}""")!!
+        assertEquals(OverKind.SHORTS_BLOCKED, shorts.kind)
+    }
 }

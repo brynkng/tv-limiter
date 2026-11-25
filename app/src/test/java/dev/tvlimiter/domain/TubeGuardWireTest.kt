@@ -183,4 +183,39 @@ class TubeGuardWireTest {
         val link = TubeGuardLink(LinkStatus.CONNECTED, "d1", "secret", listOf("Ana"))
         assertFalse(link.toString().contains("secret"))
     }
+
+    private val shortReport = QueuedReport("", "", 37, startElapsedMs = 10_000, startWallMs = 5_000_000, bootCount = 7, short = true, image = "QUJD", shortKey = "k1")
+
+    @Test
+    fun `a Short's report has its length and picture and no title or channel`() {
+        val body = obj(TubeGuardWire.reportBody(shortReport, Moment(70_000, 5_060_000), currentBootCount = 7))
+        assertEquals(setOf("kind", "image", "app", "ageMs", "bootCount", "currentBootCount", "durationSec"), body.keys)
+        assertEquals("short", body["kind"]!!.jsonPrimitive.content)
+        assertEquals("QUJD", body["image"]!!.jsonPrimitive.content)
+        assertEquals(37, body["durationSec"]!!.jsonPrimitive.int)
+    }
+
+    @Test
+    fun `a queued Short keeps its picture, and the hash that tells it from the next one is never sent`() {
+        val watch = Watch("", "", 37, Moment(1, 2), short = ShortArt("k1", "QUJD"))
+        val queued = TubeGuardWire.queued(watch, 3, "c9")
+        assertTrue(queued.short)
+        assertEquals("", queued.channel)
+        assertEquals("QUJD", queued.image)
+        assertEquals("k1", queued.shortKey)
+        assertFalse(TubeGuardWire.reportBody(queued, Moment(5, 6), 3).contains("k1"))
+        assertEquals(VideoKey.ofShort(37, "k1"), VideoKey.of(queued))
+    }
+
+    @Test
+    fun `the Shorts setting is read per child and for the whole TV from pair and check-in replies`() {
+        val reply = """{"serverTime":1,"shorts":"block","children":[{"id":"c1","name":"Ana","shorts":"block"},{"id":"c2","name":"Ben","shorts":"allow"}]}"""
+        assertEquals(listOf(TubeGuardChild("c1", "Ana", true), TubeGuardChild("c2", "Ben", false)), TubeGuardWire.children(reply))
+        assertEquals(true, TubeGuardWire.shortsBlocked(reply))
+        assertEquals(false, TubeGuardWire.shortsBlocked("""{"shorts":"allow"}"""))
+        assertEquals(null, TubeGuardWire.shortsBlocked("""{"serverTime":1}"""))
+        val paired = TubeGuardWire.pairResult(201, """{"deviceId":"d","deviceToken":"t","shorts":"block","children":[{"id":"c1","name":"Ana","shorts":"block"}]}""")
+        assertEquals(true, (paired as PairResult.Paired).shortsBlocked)
+        assertTrue(paired.children.single().shortsBlocked)
+    }
 }

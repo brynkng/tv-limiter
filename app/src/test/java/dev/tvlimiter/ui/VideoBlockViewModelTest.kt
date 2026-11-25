@@ -12,6 +12,7 @@ import dev.tvlimiter.domain.RequestStatus
 import dev.tvlimiter.domain.VideoKey
 import dev.tvlimiter.domain.WatchOutcome
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -89,12 +90,51 @@ class VideoBlockViewModelTest {
     }
 
     @Test
-    fun `an unreachable or undecided poll changes nothing`() {
+    fun `an unreachable poll changes nothing`() {
         val m = asked(model())
         m.pollResult(Fetch.Unreachable)
         m.pollResult(Fetch.Gone)
-        m.pollResult(Fetch.Got(WatchOutcome(false, null, null, null, null, null)))
         assertEquals(VideoStep.ASKED, m.step)
+    }
+
+    @Test
+    fun `an answer that is no longer decided lifts the block rather than holding it on old news`() {
+        val m = asked(model())
+        m.pollResult(Fetch.Got(WatchOutcome(false, null, null, null, null, null)))
+        assertEquals(VideoStep.RESUME, m.step)
+    }
+
+    @Test
+    fun `a new reason from TubeGuard replaces the one on the screen, as after a ban is removed`() {
+        val banned = BlockedVideo(VideoKey.of("Haunted Castle", "Spooky TV", 600), OverKind.VIDEO_BAN, null, null, "w1")
+        val m = VideoBlockViewModel(banned, guard, {}, {}, {})
+        assertEquals("This video is blocked.", m.reason)
+        m.pollResult(outcome("over"))
+        assertEquals("This video has a lot of scary or creepy parts.", m.reason)
+        assertEquals(VideoStep.CHOOSE, m.step)
+    }
+
+    @Test
+    fun `in Shorts the child is told to press Back to leave them, and the parent is not offered the channel`() {
+        val short = BlockedVideo(VideoKey.ofShort(30, "abc"), OverKind.SHORTS_BLOCKED, null, null, null)
+        val m = VideoBlockViewModel(short, guard, { videoAllowed++ }, { channelAllowed++ }, { parentMode++ })
+        assertEquals("Shorts are turned off.", m.reason)
+        assertEquals("Leave Shorts", m.pickAnotherLabel)
+        assertEquals("Press Back to leave Shorts.", m.pickAnotherHint)
+        assertFalse(m.canAllowChannel)
+        m.requestPin()
+        m.applyCheck(m.checkPin("2468"))
+        m.allowThisChannel()
+        assertEquals(0, channelAllowed)
+        assertEquals(VideoStep.ALLOW, m.step)
+        assertTrue(model().canAllowChannel)
+        assertEquals("Pick another video", model().pickAnotherLabel)
+    }
+
+    @Test
+    fun `an age block says the video is for older kids`() {
+        val aged = BlockedVideo(VideoKey.of("Teen Show", "Teen TV", 600), OverKind.AGE, null, null, "w2", ageBand = "13+")
+        assertEquals("This video is for older kids (13+).", VideoBlockViewModel(aged, guard, {}, {}, {}).reason)
     }
 
     @Test

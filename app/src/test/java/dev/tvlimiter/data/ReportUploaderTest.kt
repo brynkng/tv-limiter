@@ -330,4 +330,41 @@ class ReportUploaderTest {
         assertTrue(seen[0].third!!.isOver)
         assertNull(seen[1].third)
     }
+
+    private fun short(key: String, elapsed: Long = 0) =
+        QueuedReport("", "", 30, startElapsedMs = elapsed, startWallMs = 0, bootCount = 7, short = true, image = "QUJD", shortKey = key)
+
+    @Test
+    fun `a Short is sent without a title or channel`() {
+        val queue = queue()
+        queue.add(short("k1"))
+        val transport = FakeTransport()
+        uploader(queue, transport).flush()
+        val sent = body(transport)
+        assertEquals("short", sent["kind"]!!.jsonPrimitive.content)
+        assertEquals("QUJD", sent["image"]!!.jsonPrimitive.content)
+        assertTrue(!sent.containsKey("title") && !sent.containsKey("channel"))
+    }
+
+    @Test
+    fun `only the newest 30 Shorts wait in the queue while the TV is offline`() {
+        val queue = queue()
+        queue.add(report("a video"))
+        (1..35).forEach { queue.add(short("k$it", elapsed = it.toLong())) }
+        val shorts = queue.all().filter { it.short }
+        assertEquals(ReportQueueRepository.MAX_SHORTS, shorts.size)
+        assertEquals("k6", shorts.first().shortKey)
+        assertEquals("k35", shorts.last().shortKey)
+        assertEquals("a video", queue.all().first().title)
+    }
+
+    @Test
+    fun `the Shorts setting in a reply is passed on with the report it answered`() {
+        val queue = queue()
+        queue.add(short("k1").copy(childId = "c1"))
+        val transport = FakeTransport(mutableListOf(HttpReply(201, """{"watchEventId":"w1","shorts":"block"}""")))
+        val told = mutableListOf<Pair<String?, Boolean>>()
+        ReportUploader(queue, transport, { "tok" }, { clock }, { boot }, onShortsSetting = { r, blocked -> told += r.childId to blocked }).flush()
+        assertEquals(listOf<Pair<String?, Boolean>>("c1" to true), told)
+    }
 }

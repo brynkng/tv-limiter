@@ -347,4 +347,108 @@ class VideoBlockerTest {
         blocker.poll(now)
         assertEquals(1, actions.shown.size)
     }
+
+    // Shorts ------------------------------------------------------------------------------------------------
+
+    private var shortsBlocked = true
+    private val shortBlocker = VideoBlocker(
+        cache,
+        allowances,
+        { parentMode },
+        { id ->
+            asked += id
+            answers[id] ?: Fetch.Unreachable
+        },
+        actions,
+        shortsBlocked = { shortsBlocked },
+    )
+    private val shortPlaying = Playing("", "", 30_000, ShortArt("k1", "QUJD"))
+    private val shortKey = VideoKey.ofShort(30, "k1")
+
+    @Test
+    fun `a Short is blocked at once from the setting the TV knows, with no answer from TubeGuard`() {
+        shortBlocker.onPlaying(shortPlaying)
+        assertTrue("untitled but not yet proved to be a Short: left alone", actions.shown.isEmpty())
+        shortBlocker.noteShort(shortKey)
+        shortBlocker.onPlaying(shortPlaying)
+        assertEquals(1, actions.pauses)
+        val shown = actions.shown.single()
+        assertEquals(OverKind.SHORTS_BLOCKED, shown.kind)
+        assertEquals("Shorts are turned off.", shown.reason)
+        assertTrue(shown.isShort)
+        assertNull(shown.watchEventId)
+    }
+
+    @Test
+    fun `a Short is left alone when Shorts are allowed, in parent mode, and when a parent allowed it`() {
+        shortBlocker.noteShort(shortKey)
+        shortsBlocked = false
+        shortBlocker.onPlaying(shortPlaying)
+        shortsBlocked = true
+        parentMode = true
+        shortBlocker.onPlaying(shortPlaying)
+        parentMode = false
+        allowances.allowVideo(shortKey)
+        shortBlocker.onPlaying(shortPlaying)
+        assertTrue(actions.shown.isEmpty())
+    }
+
+    @Test
+    fun `another Short that has not been seen play is not blocked until it has`() {
+        shortBlocker.noteShort(shortKey)
+        shortBlocker.onPlaying(Playing("", "", 22_000, ShortArt("k2", "RUZH")))
+        assertTrue(actions.shown.isEmpty())
+    }
+
+    @Test
+    fun `an instant block takes TubeGuard's id for the watch when the report is answered, so the child can ask a parent`() {
+        shortBlocker.noteShort(shortKey)
+        shortBlocker.onPlaying(shortPlaying)
+        shortBlocker.onReported(shortKey, "w9", outcome("over", OverKind.SHORTS_BLOCKED), now)
+        assertEquals(2, actions.shown.size)
+        assertEquals("w9", actions.shown.last().watchEventId)
+    }
+
+    // A block from the cache is not kept on old news ---------------------------------------------------------------
+
+    @Test
+    fun `a cached block whose answer is no longer decided is forgotten`() {
+        cache.put(castleKey, outcome("over", OverKind.VIDEO_BAN), "w1")
+        blocker.onPlaying(castle)
+        assertEquals("This video is blocked.", actions.shown.single().reason)
+        answers["w1"] = Fetch.Got(outcome("not_checked", decided = false))
+        blocker.poll(now)
+        assertEquals(listOf("w1"), asked)
+        assertNull(cache.find(castleKey))
+        blocker.onPlaying(castle)
+        assertEquals("a replay is no longer covered", 1, actions.shown.size)
+    }
+
+    @Test
+    fun `a cached ban that is no longer a ban is replaced by the category it is over now, on the cache and the screen`() {
+        cache.put(castleKey, outcome("over", OverKind.VIDEO_BAN), "w1")
+        blocker.onPlaying(castle)
+        answers["w1"] = Fetch.Got(over)
+        blocker.poll(now)
+        assertEquals(OverKind.VALUE, cache.find(castleKey)!!.overKind)
+        assertEquals(2, actions.shown.size)
+        assertEquals("This video has a lot of scary or creepy parts.", actions.shown.last().reason)
+    }
+
+    @Test
+    fun `a cached block that is within now is forgotten`() {
+        cache.put(castleKey, outcome("over", OverKind.VIDEO_BAN), "w1")
+        blocker.onPlaying(castle)
+        answers["w1"] = Fetch.Got(outcome("within"))
+        blocker.poll(now)
+        assertNull(cache.find(castleKey))
+    }
+
+    @Test
+    fun `a cached block is asked about once while it is being checked`() {
+        cache.put(castleKey, over, "w1")
+        blocker.onPlaying(castle)
+        blocker.onPlaying(castle)
+        assertEquals(1, blocker.pendingCount())
+    }
 }
