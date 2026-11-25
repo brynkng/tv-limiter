@@ -8,3 +8,7 @@ local.properties
 keystore.properties
 *.jks
 *.keystore
+local/
+CLAUDE.local.md
+.claude/agent-memory-local/
+.claude/settings.local.json

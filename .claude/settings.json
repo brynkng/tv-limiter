@@ -1,0 +1,48 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(.claude/skills/tv-device/scripts/device.sh emu *)",
+      "Bash(./gradlew *)",
+      "mcp__mobile-mcp__mobile_list_available_devices",
+      "mcp__mobile-mcp__mobile_take_screenshot",
+      "mcp__mobile-mcp__mobile_list_elements_on_screen",
+      "mcp__mobile-mcp__mobile_get_foreground_app",
+      "mcp__mobile-mcp__mobile_get_screen_size",
+      "mcp__mobile-mcp__mobile_get_orientation",
+      "mcp__mobile-mcp__mobile_get_device_logs",
+      "mcp__mobile-mcp__mobile_list_crashes",
+      "mcp__mobile-mcp__mobile_get_crash"
+    ],
+    "deny": [
+      "Read(./keystore.properties)",
+      "Read(~/.android-keys/**)",
+      "mcp__mobile-mcp__mobile_uninstall_app",
+      "mcp__mobile-mcp__mobile_clear_app_data",
+      "mcp__mobile-mcp__mobile_login_to_cloud_provider"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Read|Edit|Write|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/guard-secrets.sh"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/tests-before-stop.sh",
+            "timeout": 600
+          }
+        ]
+      }
+    ]
+  }
+}
