@@ -6,27 +6,39 @@ data class Moment(val elapsedMs: Long, val wallMs: Long)
 /** What YouTube's media session says is playing right now. */
 data class Playing(val title: String, val channel: String, val lengthMs: Long)
 
-/** One video the child watched, ready to be reported. [start] is when it first played. */
-data class Watch(val title: String, val channel: String, val durationSec: Int?, val start: Moment)
+/**
+ * One video the child watched, ready to be reported. [start] is when it first played. A [correction] is a
+ * watch that was already reported, now with a longer length: the first report was an ad's.
+ */
+data class Watch(val title: String, val channel: String, val durationSec: Int?, val start: Moment, val correction: Boolean = false)
 
 /**
  * Turns what YouTube's media session says into watches. It is fed the current state every few
- * seconds and when anything changes, and it hands back each watch once.
+ * seconds and when anything changes, and it hands back each watch once, as soon as it is worth reporting.
  *
- * - A video counts after [Rules.minPlayMs] of play, so skipping through videos reports nothing.
+ * - An item at least [Rules.longMs] long (a video, or a long ad) is reported once it has played
+ *   [Rules.minPlayMs], so a backend can act on it within seconds.
+ * - Anything shorter (Shorts, short videos, most pre-roll ads) is reported once it has been quiet for
+ *   [Rules.shortQuietMs], and after the same [Rules.minPlayMs] of play, so skipping through reports nothing.
  * - YouTube plays ads under the video's own title with short lengths of their own. Everything with
  *   the same title and channel is one watch, and it keeps the longest length seen.
  * - Coming back to the same title and channel within [Rules.joinGapMs] (a pause, a replay, ads
  *   between parts) continues the same watch, so it is reported once.
- * - A watch goes out when it has been quiet for [Rules.joinGapMs], or after [Rules.settleMs] of
- *   viewing, so a long video is reported before it ends. By then the ads are over and the length is known.
+ * - If the first report carried an ad's length, a length at least [Rules.correctionMs] longer for the same
+ *   watch is handed back once more as a correction, at most [Rules.maxCorrections] times. A mid-roll ad is
+ *   shorter than its video, so it never causes one.
  * - Nothing that plays while [update] says the report is suppressed (parent mode, or not paired) counts.
  */
 class WatchTracker(private val rules: Rules = Rules()) {
     data class Rules(
         val minPlayMs: Long = 5_000,
         val joinGapMs: Long = 60_000,
-        val settleMs: Long = 120_000,
+        /** Items shorter than this wait for [shortQuietMs] of quiet before they are reported. */
+        val longMs: Long = 60_000,
+        val shortQuietMs: Long = 10_000,
+        /** How much longer a length must be than the reported one to correct it. */
+        val correctionMs: Long = 3_000,
+        val maxCorrections: Int = 2,
         /** The most play one update can add, so a long silence is never counted as viewing. */
         val maxCreditMs: Long = 15_000,
     )
@@ -34,8 +46,16 @@ class WatchTracker(private val rules: Rules = Rules()) {
     private class Open(val key: String, val title: String, val channel: String, val start: Moment) {
         var lastPlayedMs = start.elapsedMs
         var playedMs = 0L
+
+        /** Play of items that are at least [Rules.longMs] long. */
+        var longPlayedMs = 0L
+
+        /** The length of the item that played at the last update. */
+        var itemMs = 0L
         var longestMs = 0L
         var reported = false
+        var reportedMs = 0L
+        var corrections = 0
     }
 
     private val open = LinkedHashMap<String, Open>()
@@ -57,6 +77,7 @@ class WatchTracker(private val rules: Rules = Rules()) {
             val key = keyOf(video.title, video.channel)
             val watch = open.getOrPut(key) { Open(key, video.title.trim(), video.channel.trim(), now) }
             watch.longestMs = maxOf(watch.longestMs, video.lengthMs)
+            watch.itemMs = video.lengthMs
             watch.lastPlayedMs = now.elapsedMs
             current = watch
         }
@@ -74,7 +95,9 @@ class WatchTracker(private val rules: Rules = Rules()) {
     private fun creditPlay(nowMs: Long) {
         val watch = current ?: return
         val since = lastUpdateMs ?: return
-        watch.playedMs += (nowMs - since).coerceIn(0, rules.maxCreditMs)
+        val credit = (nowMs - since).coerceIn(0, rules.maxCreditMs)
+        watch.playedMs += credit
+        if (watch.itemMs >= rules.longMs) watch.longPlayedMs += credit
         watch.lastPlayedMs = nowMs
     }
 
@@ -83,13 +106,23 @@ class WatchTracker(private val rules: Rules = Rules()) {
         val iterator = open.values.iterator()
         while (iterator.hasNext()) {
             val w = iterator.next()
-            val quiet = w !== current && nowMs - w.lastPlayedMs >= rules.joinGapMs
-            val due = everything || quiet || nowMs - w.start.elapsedMs >= rules.settleMs
-            if (!w.reported && w.playedMs >= rules.minPlayMs && due) {
-                w.reported = true
-                out += Watch(w.title, w.channel, seconds(w.longestMs), w.start)
+            val idleMs = if (w === current) 0 else nowMs - w.lastPlayedMs
+            val over = w !== current && idleMs >= rules.joinGapMs
+            if (!w.reported) {
+                val quietFor = if (w.longestMs >= rules.longMs) rules.joinGapMs else rules.shortQuietMs
+                val soon = w.longPlayedMs >= rules.minPlayMs
+                val due = everything || soon || (w !== current && idleMs >= quietFor)
+                if (w.playedMs >= rules.minPlayMs && due) {
+                    w.reported = true
+                    w.reportedMs = w.longestMs
+                    out += Watch(w.title, w.channel, seconds(w.longestMs), w.start)
+                }
+            } else if (w.corrections < rules.maxCorrections && w.longestMs >= w.reportedMs + rules.correctionMs) {
+                w.corrections++
+                w.reportedMs = w.longestMs
+                out += Watch(w.title, w.channel, seconds(w.longestMs), w.start, correction = true)
             }
-            if (quiet) iterator.remove()
+            if (over) iterator.remove()
         }
         return out.sortedBy { it.start.elapsedMs }
     }
