@@ -209,6 +209,23 @@ object TubeGuard {
         }
     }
 
+    /**
+     * A check-in now, off the main thread, for when the TV's list of children may be stale: when tracking starts
+     * and when a parent opens a profile's editor. [then] runs on the worker thread afterwards.
+     */
+    fun checkInNow(context: Context, then: (() -> Unit)? = null) {
+        if (!isConnected(context)) return
+        val app = context.applicationContext
+        worker.execute {
+            try {
+                heartbeatNow(app)
+            } catch (e: Exception) {
+                Log.w(TAG, "Check-in failed: ${e.javaClass.simpleName}")
+            }
+            then?.invoke()
+        }
+    }
+
     /** The check-in. Reports whether notification access is still granted. Returns false when it should be retried. */
     internal fun heartbeatNow(context: Context): Boolean = synchronized(this) {
         if (!isConnected(context)) return true

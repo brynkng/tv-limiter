@@ -41,6 +41,10 @@ class ProfileEditorActivity : GuardedActivity() {
         // The keyboard opens only when the parent presses OK on the name.
         window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN)
         content = scrollScreen()
+        // The TubeGuard child choice lists the children from the last check-in, so ask for a fresh list.
+        TubeGuard.checkInNow(this) {
+            runOnUiThread { if (!isFinishing && !isDestroyed && SettingsUnlock.shared.isUnlocked) onUnlockedResume() }
+        }
     }
 
     override fun onUnlockedResume() {

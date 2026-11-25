@@ -80,6 +80,8 @@ class TrackingService : Service() {
         running = this
         startInForeground()
         TubeGuard.schedule(this)
+        // Picks up the family's current children (for profile links) without waiting for the 4-hour check-in.
+        TubeGuard.checkInNow(this)
         thread = HandlerThread("tracking").apply { start() }
         handler = Handler(thread.looper)
         handler.post(tick)
