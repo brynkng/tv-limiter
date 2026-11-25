@@ -21,7 +21,16 @@ data class QueuedReport(
     val startWallMs: Long,
     /** Settings.Global.BOOT_COUNT when the video was watched. Elapsed time starts again at every boot. */
     val bootCount: Int,
-)
+    /** True when this changes the length of a watch already reported, so the backend corrects it instead of adding one. */
+    val correction: Boolean = false,
+) {
+    /** Which watch this is, among the ones from this boot. A correction and the report it corrects share it. */
+    val key: String get() = "$bootCount:$startElapsedMs"
+}
+
+/** A report the backend has taken, remembered for a while so a correction can name it. */
+@Serializable
+data class SentReport(val key: String, val watchEventId: String)
 
 /** What the TubeGuard backend sends back for a pairing request. */
 sealed interface PairResult {
@@ -105,7 +114,7 @@ object TubeGuardWire {
      * measured on the elapsed clock, which a child can't change. After a reboot the elapsed clock has
      * started over, so the age is the wall clock's guess and the backend marks it approximate.
      */
-    fun reportBody(report: QueuedReport, now: Moment, currentBootCount: Int): String {
+    fun reportBody(report: QueuedReport, now: Moment, currentBootCount: Int, replaces: String? = null): String {
         val sameBoot = report.bootCount == currentBootCount
         val age = if (sameBoot) now.elapsedMs - report.startElapsedMs else now.wallMs - report.startWallMs
         return buildJsonObject {
@@ -116,7 +125,15 @@ object TubeGuardWire {
             put("bootCount", report.bootCount)
             put("currentBootCount", currentBootCount)
             report.durationSec?.let { put("durationSec", it) }
+            replaces?.let { put("replaces", it) }
         }.toString()
+    }
+
+    /** The id the backend gave a stored watch, or null when the reply doesn't carry one. */
+    fun watchEventId(body: String): String? = try {
+        Json.parseToJsonElement(body).jsonObject["watchEventId"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotEmpty() }
+    } catch (e: Exception) {
+        null
     }
 
     fun queued(watch: Watch, bootCount: Int) = QueuedReport(
@@ -126,6 +143,7 @@ object TubeGuardWire {
         startElapsedMs = watch.start.elapsedMs,
         startWallMs = watch.start.wallMs,
         bootCount = bootCount,
+        correction = watch.correction,
     )
 
     fun pairResult(status: Int, body: String): PairResult = when {

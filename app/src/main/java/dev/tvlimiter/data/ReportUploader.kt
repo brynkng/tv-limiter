@@ -19,7 +19,7 @@ sealed interface FlushResult {
 
 /**
  * Sends the queued reports in order, oldest first, stopping at the first one that fails so order
- * is kept. A failure starts a growing wait, and nothing is sent until it is over.
+ * is kept. The id the backend gives a report is kept, so a later correction can name it. A failure starts a growing wait, and nothing is sent until it is over.
  */
 class ReportUploader(
     private val queue: ReportQueueRepository,
@@ -36,13 +36,26 @@ class ReportUploader(
             val wait = backoff.waitLeftMs(moment.elapsedMs)
             if (wait > 0) return FlushResult.Retry(wait)
             val report = queue.first() ?: return FlushResult.Done
-            val status = try {
-                transport.post(TubeGuardWire.REPORTS, deviceToken, TubeGuardWire.reportBody(report, moment, bootCount())).status
+            var replaces: String? = null
+            if (report.correction) {
+                replaces = queue.sentId(report)
+                if (replaces == null) {
+                    // The watch it corrects is no longer known, and sending it alone would add a watch.
+                    queue.removeFirst(report)
+                    continue
+                }
+            }
+            val reply = try {
+                transport.post(TubeGuardWire.REPORTS, deviceToken, TubeGuardWire.reportBody(report, moment, bootCount(), replaces))
             } catch (e: IOException) {
                 return FlushResult.Retry(backoff.failure(moment.elapsedMs))
             }
-            when (UploadOutcome.of(status)) {
-                UploadOutcome.Sent, UploadOutcome.Rejected -> {
+            when (UploadOutcome.of(reply.status)) {
+                UploadOutcome.Sent -> {
+                    backoff.success()
+                    if (report.correction) queue.removeFirst(report) else queue.markSent(report, TubeGuardWire.watchEventId(reply.body))
+                }
+                UploadOutcome.Rejected -> {
                     backoff.success()
                     queue.removeFirst(report)
                 }
