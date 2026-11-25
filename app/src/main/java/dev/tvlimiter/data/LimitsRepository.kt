@@ -2,15 +2,16 @@ package dev.tvlimiter.data
 
 import android.content.Context
 import dev.tvlimiter.domain.Limit
-import java.io.File
+import dev.tvlimiter.domain.Profiles
 import kotlinx.serialization.Serializable
 
 @Serializable
 data class LimitsFile(val limits: List<Limit> = listOf(Limit.defaultWholeTv()))
 
 /**
- * The only in-memory copy of the limits. The service, the block screen and the settings
- * screens all go through this one instance, so an edit is never overwritten by a stale copy.
+ * The only in-memory copy of one profile's limits. The service, the block screen and the
+ * settings screens all go through this one instance per profile, so an edit is never
+ * overwritten by a stale copy.
  */
 class LimitsRepository(private val store: JsonFileStore<LimitsFile>) {
     private val lock = Any()
@@ -29,6 +30,9 @@ class LimitsRepository(private val store: JsonFileStore<LimitsFile>) {
         }
         save(next)
     }
+
+    /** Replaces every limit at once, as when a new profile starts from a copy of the shared limits. */
+    fun replaceAll(limits: List<Limit>) = synchronized(lock) { save(limits) }
 
     fun delete(id: String) = synchronized(lock) {
         if (id == Limit.WHOLE_TV_ID) return@synchronized
@@ -50,14 +54,17 @@ class LimitsRepository(private val store: JsonFileStore<LimitsFile>) {
     }
 
     companion object {
-        @Volatile private var instance: LimitsRepository? = null
+        private val instances = mutableMapOf<String, LimitsRepository>()
 
-        fun get(context: Context): LimitsRepository = instance ?: synchronized(this) {
-            instance ?: LimitsRepository(
-                JsonFileStore(File(context.applicationContext.filesDir, "limits.json"), LimitsFile.serializer()) {
-                    LimitsFile()
-                },
-            ).also { instance = it }
+        /** The limits of [profileId]; the shared profile is today's limits.json. */
+        fun get(context: Context, profileId: String = Profiles.SHARED_ID): LimitsRepository = synchronized(instances) {
+            instances.getOrPut(profileId) {
+                val file = Profiles.dataFile(context.applicationContext.filesDir, profileId, "limits.json")
+                LimitsRepository(JsonFileStore(file, LimitsFile.serializer()) { LimitsFile() })
+            }
         }
+
+        /** Drops a deleted profile's copy, so a later profile can never see it. */
+        fun forget(profileId: String) = synchronized(instances) { instances.remove(profileId) }
     }
 }

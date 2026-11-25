@@ -20,6 +20,9 @@ interface PinStore {
     fun load(): PinRecord?
     fun save(record: PinRecord)
 
+    /** Removes the saved PIN, so none is set. */
+    fun clear()
+
     /** True when the saved PIN could not be read back, so it must not be treated as never set. */
     fun isDamaged(): Boolean = false
 }
@@ -47,6 +50,9 @@ class PinGuard(
     fun isDamaged(): Boolean = store.load() == null && store.isDamaged()
 
     fun setPin(pin: String) = store.save(hasher.create(pin))
+
+    /** Removes the PIN. Only a young child's profile, where a passkey is optional, offers this. */
+    fun clearPin() = store.clear()
 
     fun lockoutSecondsLeft(): Int {
         val record = store.load() ?: return 0

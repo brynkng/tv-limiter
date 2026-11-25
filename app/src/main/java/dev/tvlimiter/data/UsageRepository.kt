@@ -3,15 +3,15 @@ package dev.tvlimiter.data
 import android.content.Context
 import dev.tvlimiter.domain.DayUsage
 import dev.tvlimiter.domain.GrantChoice
+import dev.tvlimiter.domain.Profiles
 import dev.tvlimiter.domain.UsageLedger
-import java.io.File
 import java.io.IOException
 import java.time.Clock
 import java.time.DayOfWeek
 import java.time.LocalDate
 
 /**
- * The only in-memory copy of today's usage. The tracking service charges time and the block
+ * The only in-memory copy of one profile's usage today. The tracking service charges time and the block
  * screen records grants through this one instance, so neither can overwrite the other.
  */
 class UsageRepository(
@@ -63,16 +63,20 @@ class UsageRepository(
     }
 
     companion object {
-        @Volatile private var instance: UsageRepository? = null
+        private val instances = mutableMapOf<String, UsageRepository>()
 
-        fun get(context: Context): UsageRepository = instance ?: synchronized(this) {
-            instance ?: UsageRepository(
-                JsonFileStore(File(context.applicationContext.filesDir, "usage.json"), DayUsage.serializer()) {
-                    DayUsage(date = "")
-                },
-                Clock.systemDefaultZone(),
-                HistoryRepository.get(context)::archive,
-            ).also { instance = it }
+        /** Today's usage for [profileId]; the shared profile is today's usage.json. */
+        fun get(context: Context, profileId: String = Profiles.SHARED_ID): UsageRepository = synchronized(instances) {
+            instances.getOrPut(profileId) {
+                val file = Profiles.dataFile(context.applicationContext.filesDir, profileId, "usage.json")
+                UsageRepository(
+                    JsonFileStore(file, DayUsage.serializer()) { DayUsage(date = "") },
+                    Clock.systemDefaultZone(),
+                    HistoryRepository.get(context, profileId)::archive,
+                )
+            }
         }
+
+        fun forget(profileId: String) = synchronized(instances) { instances.remove(profileId) }
     }
 }

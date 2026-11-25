@@ -2,8 +2,8 @@ package dev.tvlimiter.data
 
 import android.content.Context
 import dev.tvlimiter.domain.DayUsage
+import dev.tvlimiter.domain.Profiles
 import dev.tvlimiter.domain.UsageHistory
-import java.io.File
 import java.io.IOException
 
 /** Finished days of usage, kept for the report. Written once per day, when a new day starts. */
@@ -24,12 +24,16 @@ class HistoryRepository(private val store: JsonFileStore<UsageHistory>) {
     }
 
     companion object {
-        @Volatile private var instance: HistoryRepository? = null
+        private val instances = mutableMapOf<String, HistoryRepository>()
 
-        fun get(context: Context): HistoryRepository = instance ?: synchronized(this) {
-            instance ?: HistoryRepository(
-                JsonFileStore(File(context.applicationContext.filesDir, "history.json"), UsageHistory.serializer()) { UsageHistory() },
-            ).also { instance = it }
+        /** The history of [profileId]; the shared profile is today's history.json. */
+        fun get(context: Context, profileId: String = Profiles.SHARED_ID): HistoryRepository = synchronized(instances) {
+            instances.getOrPut(profileId) {
+                val file = Profiles.dataFile(context.applicationContext.filesDir, profileId, "history.json")
+                HistoryRepository(JsonFileStore(file, UsageHistory.serializer()) { UsageHistory() })
+            }
         }
+
+        fun forget(profileId: String) = synchronized(instances) { instances.remove(profileId) }
     }
 }
