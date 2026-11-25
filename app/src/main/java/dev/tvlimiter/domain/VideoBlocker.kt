@@ -118,9 +118,14 @@ class VideoBlocker(
     }
 
     /** A parent approved or allowed [key]: it is no longer blocked and a replay plays. */
-    fun lifted(key: VideoKey) {
+    fun lifted(key: VideoKey, watchEventId: String? = null, nowMs: Long = 0) {
         cache.remove(key)
-        synchronized(lock) { if (blocked?.key?.sameVideo(key) == true) blocked = null }
+        synchronized(lock) {
+            if (blocked?.key?.sameVideo(key) == true) blocked = null
+            // It plays again, so keep asking about it like any fine video: a ban or a stricter setting made
+            // after the approval still stops it. A parent's allowance on this TV still wins (see decided).
+            if (watchEventId != null) fine = Pending(key, watchEventId, nowMs).also { it.lastAskedMs = nowMs }
+        }
     }
 
     /** Whether [poll] has anything to ask about: an undecided watch, or a fine video still on screen. */

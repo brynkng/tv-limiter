@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.os.SystemClock
 import android.os.Handler
 import android.os.Looper
 import android.view.Gravity
@@ -260,7 +261,10 @@ class VideoBlockActivity : Activity() {
 
     private fun resume() {
         val key = model.video.key
-        TubeGuard.screenWorker.execute { TubeGuard.blocker(applicationContext).lifted(key) }
+        val watchEventId = model.video.watchEventId
+        TubeGuard.screenWorker.execute {
+            TubeGuard.blocker(applicationContext).lifted(key, watchEventId, SystemClock.elapsedRealtime())
+        }
         WatchListener.running?.playYouTube()
         finishScreen()
     }
