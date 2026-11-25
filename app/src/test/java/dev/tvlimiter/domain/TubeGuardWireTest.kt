@@ -74,6 +74,28 @@ class TubeGuardWireTest {
     }
 
     @Test
+    fun `a correction body names the watch it replaces, and a plain one does not`() {
+        val body = obj(TubeGuardWire.reportBody(report, Moment(70_000, 5_060_000), 7, replaces = "w1"))
+        assertEquals("w1", body["replaces"]!!.jsonPrimitive.content)
+        assertFalse(obj(TubeGuardWire.reportBody(report, Moment(70_000, 5_060_000), 7)).containsKey("replaces"))
+    }
+
+    @Test
+    fun `a corrected watch is queued as a correction with the same key`() {
+        val watch = Watch("T", "C", 900, Moment(10_000, 2), correction = true)
+        val queued = TubeGuardWire.queued(watch, bootCount = 3)
+        assertTrue(queued.correction)
+        assertEquals(TubeGuardWire.queued(watch.copy(correction = false), 3).key, queued.key)
+    }
+
+    @Test
+    fun `the watch id is read from the reply, and a reply without one gives none`() {
+        assertEquals("w1", TubeGuardWire.watchEventId("""{"watchEventId":"w1","watchTime":5}"""))
+        assertEquals(null, TubeGuardWire.watchEventId("{}"))
+        assertEquals(null, TubeGuardWire.watchEventId("not json"))
+    }
+
+    @Test
     fun `the pairing and check in bodies carry only what the contract needs`() {
         val pair = obj(TubeGuardWire.pairBody("12345678", "Living room TV", "America/Denver", "1.2.0"))
         assertEquals(setOf("code", "name", "platform", "timeZone", "appVersion"), pair.keys)

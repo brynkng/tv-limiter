@@ -34,12 +34,23 @@ class WatchTrackerTest {
     }
 
     @Test
-    fun `a video played for 5 seconds is reported once it goes quiet`() {
-        play(0, 5, video(seconds = 213))
+    fun `an item of a minute or more is reported once it has played 5 seconds, without going quiet`() {
+        play(0, 4, video(seconds = 60))
+        assertTrue(reports.isEmpty())
+        play(5, 8, video(seconds = 60))
+        assertEquals(listOf(Watch("Video A", "Channel A", 60, Moment(0, 1_000_000_000L))), reports)
+        play(9, 300, video(seconds = 60))
+        assertEquals("still one report", 1, reports.size)
+    }
+
+    @Test
+    fun `a short item is reported once it has been quiet for 10 seconds`() {
+        play(0, 5, video(seconds = 59))
         at(6, null)
+        at(14, null)
         assertTrue("held back while a replay could still join it", reports.isEmpty())
-        at(70, null)
-        assertEquals(listOf(Watch("Video A", "Channel A", 213, Moment(0, 1_000_000_000L))), reports)
+        at(16, null)
+        assertEquals(listOf(Watch("Video A", "Channel A", 59, Moment(0, 1_000_000_000L))), reports)
     }
 
     @Test
@@ -57,14 +68,69 @@ class WatchTrackerTest {
     }
 
     @Test
-    fun `a long video is reported after two minutes without waiting for it to end`() {
-        play(0, 119, video(seconds = 3000))
-        assertTrue(reports.isEmpty())
-        play(120, 130, video(seconds = 3000))
+    fun `a 30 second pre-roll then a 900 second video is one report of 900 seconds`() {
+        play(0, 30, video(seconds = 30))
+        play(31, 120, video(seconds = 900))
+        at(300, null)
+        assertEquals(listOf(900), reports.map { it.durationSec })
+        assertTrue(reports.none { it.correction })
+    }
+
+    @Test
+    fun `a 120 second pre-roll then a 900 second video is a report then a correction to 900 seconds`() {
+        play(0, 120, video(seconds = 120))
+        assertEquals(listOf(120 to false), reports.map { it.durationSec to it.correction })
+        play(121, 200, video(seconds = 900))
+        at(300, null)
+        assertEquals(listOf(120 to false, 900 to true), reports.map { it.durationSec to it.correction })
+        assertEquals("the correction names the same watch", reports[0].start, reports[1].start)
+    }
+
+    @Test
+    fun `a mid-roll ad shorter than the video gives no correction`() {
+        play(0, 60, video(seconds = 896))
+        play(61, 260, video(seconds = 199))
+        play(261, 300, video(seconds = 896))
+        at(400, null)
+        assertEquals(listOf(896 to false), reports.map { it.durationSec to it.correction })
+    }
+
+    @Test
+    fun `a length under 3 seconds longer is not a correction`() {
+        play(0, 30, video(seconds = 100))
+        play(31, 60, video(seconds = 102))
+        at(300, null)
         assertEquals(1, reports.size)
-        play(130, 3000, video(seconds = 3000))
-        at(3100, null)
-        assertEquals("still one report for the whole video", 1, reports.size)
+    }
+
+    @Test
+    fun `a watch is corrected at most twice`() {
+        play(0, 10, video(seconds = 100))
+        play(11, 20, video(seconds = 200))
+        play(21, 30, video(seconds = 900))
+        play(31, 40, video(seconds = 1500))
+        at(300, null)
+        assertEquals(listOf(100, 200, 900), reports.map { it.durationSec })
+    }
+
+    @Test
+    fun `a Short is reported about 10 seconds after it ends`() {
+        play(0, 9, video("Short 1", seconds = 20))
+        // The update that sees it stopped still credits the 3 seconds before it, so the quiet starts at 12.
+        at(12, null)
+        at(21, null)
+        assertTrue(reports.isEmpty())
+        at(23, null)
+        assertEquals(listOf("Short 1"), reports.map { it.title })
+    }
+
+    @Test
+    fun `a Short swiped past is reported without waiting a minute`() {
+        play(0, 9, video("Short 1", seconds = 20))
+        play(10, 19, video("Short 2", seconds = 20))
+        // Short 1 has been quiet for 10 seconds by now. Short 2 is still playing.
+        play(20, 22, video("Short 2", seconds = 20))
+        assertEquals(listOf("Short 1"), reports.map { it.title })
     }
 
     @Test
@@ -143,9 +209,9 @@ class WatchTrackerTest {
     }
 
     @Test
-    fun `a video that was playing when parent mode started is not reported`() {
-        play(0, 20, video())
-        at(21, video(), suppressed = true)
+    fun `a short video that was playing when parent mode started is not reported`() {
+        play(0, 20, video(seconds = 30))
+        at(21, video(seconds = 30), suppressed = true)
         at(22, null, suppressed = true)
         at(200, null)
         assertTrue(reports.isEmpty())
@@ -153,7 +219,7 @@ class WatchTrackerTest {
 
     @Test
     fun `a video the child watched before parent mode started is still reported`() {
-        play(0, 200, video(seconds = 1000))
+        play(0, 20, video(seconds = 1000))
         assertEquals(1, reports.size)
         at(201, video(), suppressed = true)
         at(400, null)
@@ -180,8 +246,8 @@ class WatchTrackerTest {
 
     @Test
     fun `finish reports what played enough without waiting`() {
-        play(0, 12, video(seconds = 300))
-        play(13, 15, video("Skipped", seconds = 300))
+        play(0, 12, video(seconds = 30))
+        play(13, 15, video("Skipped", seconds = 30))
         val out = tracker.finish(Moment(16_000, 1_000_016_000))
         assertEquals(listOf("Video A"), out.map { it.title })
     }

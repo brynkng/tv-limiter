@@ -23,8 +23,10 @@ class ReportUploaderTest {
         JsonFileStore(File(folder.root, "tubeguard-reports.json"), ReportQueueFile.serializer()) { ReportQueueFile() },
     )
 
-    private fun report(title: String, boot: Int = 7, elapsed: Long = 0, wall: Long = 0) =
-        QueuedReport(title, "Channel", 100, startElapsedMs = elapsed, startWallMs = wall, bootCount = boot)
+    private fun report(title: String, boot: Int = 7, elapsed: Long = 0, wall: Long = 0, seconds: Int? = 100, correction: Boolean = false) =
+        QueuedReport(title, "Channel", seconds, startElapsedMs = elapsed, startWallMs = wall, bootCount = boot, correction = correction)
+
+    private fun body(transport: FakeTransport, index: Int = 0) = Json.parseToJsonElement(transport.sent[index].third).jsonObject
 
     private class FakeTransport(var replies: MutableList<Any> = mutableListOf()) : TubeGuardTransport {
         val sent = mutableListOf<Triple<String, String?, String>>()
@@ -180,6 +182,88 @@ class ReportUploaderTest {
         queue.add(report("b"))
         queue.removeFirst(a)
         assertEquals(listOf("b"), queue.all().map { it.title })
+    }
+
+    @Test
+    fun `the id the backend gives a report is kept, and survives a restart`() {
+        val queue = queue().apply { add(report("one", elapsed = 5)) }
+        val transport = FakeTransport(mutableListOf(HttpReply(201, """{"watchEventId":"w1","watchTime":1}""")))
+        uploader(queue, transport).flush()
+        assertTrue(queue.all().isEmpty())
+        assertEquals("w1", queue.sentId(report("one", elapsed = 5)))
+        assertEquals("w1", queue().sentId(report("one", elapsed = 5)))
+        assertNull(queue.sentId(report("other", elapsed = 6)))
+    }
+
+    @Test
+    fun `a correction after the report was sent names it and carries the new length`() {
+        val queue = queue().apply { add(report("one", elapsed = 5, seconds = 120)) }
+        val transport = FakeTransport(mutableListOf(HttpReply(201, """{"watchEventId":"w1"}"""), HttpReply(200, """{"watchEventId":"w1"}""")))
+        val uploader = uploader(queue, transport)
+        uploader.flush()
+        queue.add(report("one", elapsed = 5, seconds = 900, correction = true))
+        assertEquals(FlushResult.Done, uploader.flush())
+        assertEquals(2, transport.sent.size)
+        assertNull(body(transport, 0)["replaces"])
+        assertEquals("w1", body(transport, 1)["replaces"]!!.jsonPrimitive.content)
+        assertEquals(900, body(transport, 1)["durationSec"]!!.jsonPrimitive.content.toInt())
+        assertTrue(queue.all().isEmpty())
+    }
+
+    @Test
+    fun `a correction queued before the report was sent changes its length instead`() {
+        val queue = queue()
+        queue.add(report("one", elapsed = 5, seconds = 120))
+        queue.add(report("one", elapsed = 5, seconds = 900, correction = true))
+        assertEquals(listOf(900), queue.all().map { it.durationSec })
+        assertTrue(queue.all().none { it.correction })
+        val transport = FakeTransport(mutableListOf(HttpReply(201, """{"watchEventId":"w1"}""")))
+        uploader(queue, transport).flush()
+        assertEquals(1, transport.sent.size)
+        assertEquals(900, body(transport)["durationSec"]!!.jsonPrimitive.content.toInt())
+        assertNull(body(transport)["replaces"])
+    }
+
+    @Test
+    fun `a correction that arrives while the report is being sent is queued once it is taken`() {
+        val queue = queue()
+        queue.add(report("one", elapsed = 5, seconds = 120))
+        val inFlight = queue.first()!!
+        queue.add(report("one", elapsed = 5, seconds = 900, correction = true))
+        queue.markSent(inFlight, "w1")
+        assertEquals(listOf(900 to true), queue.all().map { it.durationSec to it.correction })
+        assertEquals("w1", queue.sentId(inFlight))
+    }
+
+    @Test
+    fun `a correction for a watch the queue does not know is dropped`() {
+        val queue = queue()
+        queue.add(report("one", elapsed = 5, seconds = 900, correction = true))
+        assertTrue(queue.all().isEmpty())
+    }
+
+    @Test
+    fun `a correction whose original has no id is dropped without being sent`() {
+        val queue = queue()
+        queue.add(report("one", elapsed = 5, seconds = 120))
+        // The reply carried no id, so the watch can't be named later.
+        val transport = FakeTransport(mutableListOf(HttpReply(201, "{}")))
+        val uploader = uploader(queue, transport)
+        uploader.flush()
+        queue.add(report("one", elapsed = 5, seconds = 900, correction = true))
+        assertTrue(queue.all().isEmpty())
+        assertEquals(FlushResult.Done, uploader.flush())
+        assertEquals(1, transport.sent.size)
+    }
+
+    @Test
+    fun `only the last 20 sent ids are kept`() {
+        val queue = queue()
+        val transport = FakeTransport(MutableList(25) { HttpReply(201, """{"watchEventId":"w$it"}""") })
+        repeat(25) { queue.add(report("r$it", elapsed = it.toLong())) }
+        uploader(queue, transport).flush()
+        assertNull(queue.sentId(report("r4", elapsed = 4)))
+        assertEquals("w24", queue.sentId(report("r24", elapsed = 24)))
     }
 
     @Test
