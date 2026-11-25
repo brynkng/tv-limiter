@@ -1,6 +1,6 @@
 # TV Limiter privacy policy
 
-Last updated: November 25, 2026
+Last updated: November 26, 2026
 
 TV Limiter is a parental control app for Android TV. A parent uses it to set daily time limits for apps on the TV. This policy explains what the app records and where that information goes.
 
@@ -26,7 +26,8 @@ TubeGuard is a service from the same developer that tells parents what their chi
 Once connected, TV Limiter sends TubeGuard:
 
 - For each YouTube video watched on the TV: its title, its channel, its length, and when it was watched. Nothing is sent while parent mode is on.
-- Every few hours, a check-in saying whether TV Limiter can still see what YouTube plays, and the app's version.
+- For a YouTube Short (which has no title), its length and one small still picture of it, about 320 by 180 pixels. TubeGuard looks at that picture to rate the Short and deletes it as soon as it has done so. It is never kept after that, and a family on the free plan has its pictures discarded without being rated. Nothing else on the screen is ever captured or sent, and the picture is not sent for regular videos.
+- Every few hours, a check-in saying whether TV Limiter can still see what YouTube plays, and the app's version. TubeGuard answers with the names of the TV's children and whether each has Shorts turned off, so the TV can cover a Short right away.
 - While a video is being checked, or while the block screen is up, a request asking TubeGuard what it decided about that watch. If a child taps Ask a parent, a request to tell the family's parents about that video. If a parent allows a video with the passkey, a note that this video is allowed. The passkey itself stays on the TV.
 - When pairing, the TV's name (as set in its settings) and time zone.
 
