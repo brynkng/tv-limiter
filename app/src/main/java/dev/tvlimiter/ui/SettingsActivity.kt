@@ -7,17 +7,21 @@ import android.view.Gravity
 import android.view.View
 import android.widget.LinearLayout
 import android.widget.Toast
+import dev.tvlimiter.BuildConfig
 import dev.tvlimiter.R
 import dev.tvlimiter.domain.ParentMode
 import dev.tvlimiter.data.LimitsRepository
 import dev.tvlimiter.data.PinRepository
 import dev.tvlimiter.data.ProfilesRepository
+import dev.tvlimiter.data.TubeGuardLinkRepository
 import dev.tvlimiter.data.UsageRepository
 import dev.tvlimiter.domain.Limit
+import dev.tvlimiter.domain.LinkStatus
 import dev.tvlimiter.domain.Profile
 import dev.tvlimiter.domain.Profiles
 import dev.tvlimiter.domain.NotificationAccessGuide
 import dev.tvlimiter.service.TrackingService
+import dev.tvlimiter.service.TubeGuard
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
@@ -27,6 +31,7 @@ import java.time.format.DateTimeFormatter
  */
 class SettingsActivity : GuardedActivity() {
     private lateinit var content: LinearLayout
+    private var confirmDisconnect = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -47,7 +52,10 @@ class SettingsActivity : GuardedActivity() {
             if (guard.hasPin() || guard.isDamaged()) super.unlockIntent() else Intent(this, PinSetupActivity::class.java)
         }
 
-    override fun onUnlockedResume() = render()
+    override fun onUnlockedResume() {
+        confirmDisconnect = false
+        render()
+    }
 
     /** Rebuilds the screen. [focusTag] names the view to focus afterwards, so a button press doesn't lose its place. */
     private fun render(focusTag: String? = null) {
@@ -81,6 +89,7 @@ class SettingsActivity : GuardedActivity() {
         parentModeRow()
         profilesSection(profiles.profiles)
         passkeyRow()
+        tubeGuardSection()
         permissions(several)
         notificationAccess()
         Donate.addTo(this, content)
@@ -192,6 +201,48 @@ class SettingsActivity : GuardedActivity() {
         content.addView(row.fullWidth(this, top = 40))
     }
 
+    /** Connecting this TV to a TubeGuard family. Left out entirely in a build with no TubeGuard address. */
+    private fun tubeGuardSection() {
+        if (!TubeGuard.enabled) return
+        val link = TubeGuardLinkRepository.get(this).current()
+        val accessOn = PermissionStatus.hasNotificationAccess(this)
+        val (status, warn) = when {
+            link.isConnected && !accessOn ->
+                "Connected to ${PairingViewModel.names(link.children)}, but notification access is off, so no videos can be reported." to true
+            link.isConnected -> "Connected. YouTube videos watched here are reported for ${PairingViewModel.names(link.children)}." to false
+            link.status == LinkStatus.DISCONNECTED ->
+                "Disconnected. This TV was removed in the TubeGuard parent app, so nothing is being reported." to true
+            else -> "Not connected. Connect this TV to your family's TubeGuard parent app to report which YouTube videos are watched." to false
+        }
+        val row = row()
+        val text = column()
+        text.addView(label("TubeGuard", sizeSp = 20f, weight = Weight.MEDIUM))
+        text.addView(label(status, sizeSp = 15f, colorId = if (warn) R.color.warn else R.color.muted))
+        if (link.isConnected) {
+            text.addView(label("Nothing is reported while parent mode is on.", sizeSp = 15f, colorId = R.color.muted))
+        }
+        row.addView(text, LinearLayout.LayoutParams(0, -2, 1f))
+        if (link.isConnected) {
+            val button = if (confirmDisconnect) {
+                tvButton("Press again to disconnect") {
+                    confirmDisconnect = false
+                    TubeGuard.disconnect(this)
+                    render(focusTag = TAG_TUBEGUARD)
+                }
+            } else {
+                tvButton("Disconnect") {
+                    confirmDisconnect = true
+                    render(focusTag = TAG_TUBEGUARD)
+                }
+            }
+            row.addView(button.apply { tag = TAG_TUBEGUARD })
+        } else {
+            val label = if (link.status == LinkStatus.DISCONNECTED) "Connect again" else "Connect to TubeGuard"
+            row.addView(tvButton(label) { startActivity(Intent(this, TubeGuardActivity::class.java)) }.apply { tag = TAG_TUBEGUARD })
+        }
+        content.addView(row.fullWidth(this, top = 40))
+    }
+
     @Deprecated("Framework activity result callback")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         if (requestCode == REQUEST_CHANGE_PASSKEY) {
@@ -244,8 +295,12 @@ class SettingsActivity : GuardedActivity() {
      */
     private fun notificationAccess() {
         if (!PermissionStatus.hasNotificationListener(this)) return
+        val paired = TubeGuard.isConnected(this)
+        // Release builds only need it once this TV is paired. Debug builds also use it for the detection recorder.
+        if (!paired && !BuildConfig.DEBUG) return
         if (PermissionStatus.hasNotificationAccess(this)) {
-            content.addView(label("YouTube video titles are being recorded.", sizeSp = 15f, colorId = R.color.muted).margins(this, top = 12))
+            val line = if (paired) "YouTube videos are being reported to TubeGuard." else "YouTube video titles are being recorded."
+            content.addView(label(line, sizeSp = 15f, colorId = R.color.muted).margins(this, top = 12))
             return
         }
         val card = column().apply {
@@ -254,7 +309,7 @@ class SettingsActivity : GuardedActivity() {
             setPadding(dp(28), dp(20), dp(28), dp(24))
         }
         card.addView(label("Notification access", sizeSp = 20f, weight = Weight.MEDIUM))
-        card.addView(label("Lets TV Limiter see which YouTube video is playing.", sizeSp = 15f, colorId = R.color.muted))
+        card.addView(label("Lets TV Limiter see which YouTube video is playing, to report it to TubeGuard.", sizeSp = 15f, colorId = R.color.muted))
         when (val guide = PermissionStatus.notificationAccessGuide(this)) {
             NotificationAccessGuide.OnePress -> {
                 card.addView(label("Press Allow, then switch on TV Limiter.", sizeSp = 15f).margins(this, top = 12))
@@ -298,6 +353,7 @@ class SettingsActivity : GuardedActivity() {
         const val EXTRA_FROM_PICKER = "from_picker"
         private const val REQUEST_CHANGE_PASSKEY = 42
         private const val TAG_PARENT_MODE = "parent_mode"
+        private const val TAG_TUBEGUARD = "tubeguard"
 
         /** The child whose limits the home screen last showed, kept while the app runs. */
         private var shownProfileId: String? = null

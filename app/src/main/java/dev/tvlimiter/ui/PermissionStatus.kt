@@ -11,6 +11,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Process
 import android.provider.Settings
+import dev.tvlimiter.R
 import dev.tvlimiter.domain.NotificationAccessGuide
 
 /** Whether the permissions TV Limiter uses are granted, and how to grant them. */
@@ -36,8 +37,11 @@ object PermissionStatus {
     fun overlayScreen(context: Context): Intent =
         Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${context.packageName}"))
 
-    /** The YouTube detection listener. Only debug builds include it. */
-    private fun listener(context: Context) = ComponentName(context.packageName, "dev.tvlimiter.detection.DetectionListener")
+    /**
+     * The notification listener that follows YouTube. A build with no TubeGuard address has none. Debug builds use
+     * the detection recorder, which extends the real one, so the access granted to it before still works.
+     */
+    private fun listener(context: Context) = ComponentName(context.packageName, context.getString(R.string.tubeguard_listener_class))
 
     fun hasNotificationListener(context: Context): Boolean =
         try {
