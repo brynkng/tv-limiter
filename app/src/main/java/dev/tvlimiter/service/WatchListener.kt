@@ -7,9 +7,11 @@ import android.media.session.MediaSessionManager
 import android.media.session.PlaybackState
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.service.notification.NotificationListenerService
 import dev.tvlimiter.domain.ParentMode
 import dev.tvlimiter.domain.Playing
+import dev.tvlimiter.domain.Positions
 import dev.tvlimiter.domain.Shorts
 import dev.tvlimiter.domain.VideoKey
 import dev.tvlimiter.domain.WatchTracker
@@ -68,7 +70,10 @@ open class WatchListener : NotificationListenerService() {
         callbacks.forEach { (controller, callback) -> controller.unregisterCallback(callback) }
         callbacks.clear()
         // Whatever has played enough is reported now, rather than lost with the listener.
-        if (TubeGuard.isConnected(this) && !ParentMode.shared.active) tracker.finish(TubeGuard.now()).forEach { TubeGuard.submit(this, it) }
+        if (TubeGuard.isConnected(this) && !ParentMode.shared.active) {
+            tracker.finish(TubeGuard.now()).forEach { TubeGuard.submit(this, it) }
+            tracker.takeSpanUpdates().forEach { TubeGuard.submitSpans(this, it) }
+        }
         TrackingService.refreshNotice(this)
         super.onListenerDisconnected()
     }
@@ -96,6 +101,7 @@ open class WatchListener : NotificationListenerService() {
         val playing = callbacks.keys.firstNotNullOfOrNull { playing(it) }
         val watches = tracker.update(TubeGuard.now(), playing, suppressed, if (suppressed) null else TubeGuard.activeProfileId(this))
         watches.forEach { TubeGuard.submit(this, it) }
+        tracker.takeSpanUpdates().forEach { TubeGuard.submitSpans(this, it) }
         // A Short is known to be one only once the tracker has seen it play untitled; from then on a replay is covered at once.
         if (!suppressed) watches.filter { it.isShort }.forEach { w -> w.short?.let { TubeGuard.blocker(this).noteShort(VideoKey.ofShort(w.durationSec, it.key)) } }
         // A video already found over a limit is blocked as soon as it plays. Parent mode and an unpaired TV block nothing.
@@ -123,7 +129,10 @@ open class WatchListener : NotificationListenerService() {
         // untitled for a moment, so the tracker waits before it calls an untitled item a Short.
         val art = if (title.isBlank() && Shorts.couldBeShort(length)) ShortArtReader.read(metadata) else null
         if (title.isBlank() && art == null) return null
-        return Playing(title, channel, length, art)
+        // The session holds the position at its last update, not the position now.
+        val state = controller.playbackState!!
+        val position = Positions.now(state.position, state.lastPositionUpdateTime, state.playbackSpeed, SystemClock.elapsedRealtime(), length)
+        return Playing(title, channel, length, art, position)
     }
 
     companion object {

@@ -16,6 +16,7 @@ import dev.tvlimiter.data.PinRepository
 import dev.tvlimiter.data.ProfilesRepository
 import dev.tvlimiter.data.ReportQueueRepository
 import dev.tvlimiter.data.ReportUploader
+import dev.tvlimiter.data.SpanUploader
 import dev.tvlimiter.data.TubeGuardLinkRepository
 import dev.tvlimiter.data.TubeGuardTransport
 import dev.tvlimiter.domain.Allowances
@@ -28,6 +29,7 @@ import dev.tvlimiter.domain.ParentMode
 import dev.tvlimiter.domain.PairResult
 import dev.tvlimiter.domain.ProfileLinks
 import dev.tvlimiter.domain.Shorts
+import dev.tvlimiter.domain.SpanUpdate
 import dev.tvlimiter.domain.TubeGuardChild
 import dev.tvlimiter.domain.TubeGuardWire
 import dev.tvlimiter.domain.UploadOutcome
@@ -62,6 +64,7 @@ object TubeGuard {
     private val worker = Executors.newSingleThreadExecutor()
     private val transport: TubeGuardTransport by lazy { HttpTransport(BuildConfig.TUBEGUARD_URL) }
     private var uploader: ReportUploader? = null
+    private var spanUploader: SpanUploader? = null
 
     fun now() = Moment(SystemClock.elapsedRealtime(), System.currentTimeMillis())
 
@@ -77,6 +80,32 @@ object TubeGuard {
         worker.execute {
             ReportQueueRepository.get(app).add(TubeGuardWire.queued(watch, bootCount(app), linkedChildId(app, watch.profileId)))
             flushNow(app)
+        }
+    }
+
+    /** Queues what was played of a watch and sends what is queued. Safe to call from any thread. */
+    fun submitSpans(context: Context, update: SpanUpdate) {
+        if (!isConnected(context)) return
+        val app = context.applicationContext
+        val key = TubeGuardWire.watchKey(bootCount(app), update.start.elapsedMs)
+        worker.execute {
+            spanUploaderFor(app).add(key, update.spans)
+            flushSpans(app)
+        }
+    }
+
+    private fun spanUploaderFor(context: Context): SpanUploader = spanUploader ?: SpanUploader(
+        queue = ReportQueueRepository.get(context),
+        transport = transport,
+        token = { TubeGuardLinkRepository.get(context).current().deviceToken },
+    ).also { spanUploader = it }
+
+    /** Runs on the worker thread. A failure is left for the next update, which carries everything again. */
+    private fun flushSpans(context: Context) {
+        try {
+            spanUploaderFor(context).flush()
+        } catch (e: Exception) {
+            Log.w(TAG, "Sending what was played failed: ${e.javaClass.simpleName}")
         }
     }
 
@@ -113,7 +142,10 @@ object TubeGuard {
             onShortsSetting = { report, blocked -> link.updateShorts(report.childId, blocked) },
         ).also { uploader = it }
         try {
-            when (val result = sender.flush()) {
+            val result = sender.flush()
+            // A report that has just been taken may be the one some waiting spans were for.
+            flushSpans(context)
+            when (result) {
                 FlushResult.Done -> true
                 is FlushResult.Retry -> {
                     scheduleRetry(context, result.afterMs)
@@ -290,6 +322,7 @@ object TubeGuard {
     fun connected(context: Context, paired: PairResult.Paired) {
         val app = context.applicationContext
         // Reports queued under an earlier pairing belong to that family.
+        spanUploader?.clear()
         ReportQueueRepository.get(app).clear()
         TubeGuardLinkRepository.get(app).connect(paired.deviceId, paired.deviceToken, paired.children, paired.shortsBlocked)
         ProfilesRepository.get(app).autoLink(paired.children)
@@ -314,6 +347,7 @@ object TubeGuard {
             }
         }
         TubeGuardLinkRepository.get(app).forget()
+        spanUploader?.clear()
         ReportQueueRepository.get(app).clear()
         BlockCacheRepository.get(app).save(emptyList())
         cancelJobs(app)
@@ -322,6 +356,7 @@ object TubeGuard {
 
     /** The backend said 401: a parent removed this TV. Reporting stops until it is paired again. */
     private fun removedByParent(context: Context) {
+        spanUploader?.clear()
         TubeGuardLinkRepository.get(context).markDisconnected()
         ReportQueueRepository.get(context).clear()
         BlockCacheRepository.get(context).save(emptyList())

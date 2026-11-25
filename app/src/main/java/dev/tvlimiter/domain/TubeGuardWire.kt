@@ -30,6 +30,8 @@ data class QueuedReport(
     val image: String? = null,
     /** The hash of the Short's picture, to tell it from the next one. Never sent. */
     val shortKey: String? = null,
+    /** What was played of the video when it was reported, or null when the session gave no position. */
+    val spans: List<Span>? = null,
 ) {
     /** Which watch this is, among the ones from this boot. A correction and the report it corrects share it. */
     val key: String get() = "$bootCount:$startElapsedMs"
@@ -105,6 +107,17 @@ object TubeGuardWire {
     /** A watch's outcome (GET), its approval request (POST) and the passkey's approval (POST). */
     fun watchPath(watchEventId: String) = "$WATCHES/${java.net.URLEncoder.encode(watchEventId, "UTF-8")}"
 
+    /** What was played of a watch so far (POST). */
+    fun spansPath(watchEventId: String) = "${watchPath(watchEventId)}/spans"
+
+    /** Names a watch the way [QueuedReport.key] does, so its spans find the id the backend gave its report. */
+    fun watchKey(bootCount: Int, startElapsedMs: Long) = "$bootCount:$startElapsedMs"
+
+    /** The played spans as the backend reads them: pairs of seconds from the start of the video. */
+    fun spansBody(spans: List<Span>): String = buildJsonObject { put("spans", spansJson(spans)) }.toString()
+
+    private fun spansJson(spans: List<Span>) = JsonArray(spans.map { JsonArray(listOf(JsonPrimitive(it.startSec), JsonPrimitive(it.endSec))) })
+
     fun requestApprovalPath(watchEventId: String) = "${watchPath(watchEventId)}/request-approval"
 
     fun approvePath(watchEventId: String) = "${watchPath(watchEventId)}/approve"
@@ -153,6 +166,7 @@ object TubeGuardWire {
             report.durationSec?.let { put("durationSec", it) }
             replaces?.let { put("replaces", it) }
             report.childId?.let { put("childId", it) }
+            report.spans?.let { put("spans", spansJson(it)) }
         }.toString()
     }
 
@@ -175,6 +189,7 @@ object TubeGuardWire {
         short = watch.isShort,
         image = watch.short?.jpegBase64,
         shortKey = watch.short?.key,
+        spans = watch.spans,
     )
 
     fun pairResult(status: Int, body: String): PairResult = when {

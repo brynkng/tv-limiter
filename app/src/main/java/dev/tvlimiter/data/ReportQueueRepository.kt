@@ -28,7 +28,10 @@ class ReportQueueRepository(private val store: JsonFileStore<ReportQueueFile>) {
     fun first(): QueuedReport? = synchronized(lock) { load().reports.firstOrNull() }
 
     /** The backend's id for the watch [report] belongs to, once that watch has been sent. */
-    fun sentId(report: QueuedReport): String? = synchronized(lock) { load().sent.lastOrNull { it.key == report.key }?.watchEventId }
+    fun sentId(report: QueuedReport): String? = sentId(report.key)
+
+    /** The backend's id for the watch named [key] (see [dev.tvlimiter.domain.TubeGuardWire.watchKey]), once it has been sent. */
+    fun sentId(key: String): String? = synchronized(lock) { load().sent.lastOrNull { it.key == key }?.watchEventId }
 
     /**
      * Queues [report]. A correction does not add a watch: while the original is still waiting it just changes the
@@ -40,7 +43,7 @@ class ReportQueueRepository(private val store: JsonFileStore<ReportQueueFile>) {
         if (!report.correction) return@synchronized save(file.copy(reports = limitShorts(file.reports + report).takeLast(MAX_REPORTS)))
         val waiting = file.reports.indexOfFirst { it.key == report.key }
         when {
-            waiting >= 0 -> save(file.copy(reports = file.reports.mapIndexed { i, r -> if (i == waiting) r.copy(durationSec = report.durationSec) else r }))
+            waiting >= 0 -> save(file.copy(reports = file.reports.mapIndexed { i, r -> if (i == waiting) r.copy(durationSec = report.durationSec, spans = report.spans ?: r.spans) else r }))
             file.sent.any { it.key == report.key } -> save(file.copy(reports = (file.reports + report).takeLast(MAX_REPORTS)))
         }
     }
