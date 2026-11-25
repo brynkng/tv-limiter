@@ -1,5 +1,7 @@
 # Profiles mode
 
+> **Changed 2026-11-24 (user-directed): shared mode is gone.** Every TV has profiles and starts with one default profile, "Kids" (Young, no passkey), whose files are today's `limits.json`, `usage.json` and `history.json`. While it is the only profile and has no passkey, the TV never shows the picker and works as before. With a second profile, or a passkey on the only one, the picker appears on wake. The default profile can't be deleted, and its passkey is `profile-pin.json`, apart from the parent's `pin.json`. Read "shared mode" below as "one profile".
+
 ## Goal
 
 A TV runs in one of two modes.
