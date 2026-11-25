@@ -9,21 +9,33 @@ import android.os.SystemClock
 import android.provider.Settings
 import android.util.Log
 import dev.tvlimiter.BuildConfig
+import dev.tvlimiter.data.BlockCacheRepository
 import dev.tvlimiter.data.FlushResult
 import dev.tvlimiter.data.HttpTransport
 import dev.tvlimiter.data.ReportQueueRepository
 import dev.tvlimiter.data.ReportUploader
 import dev.tvlimiter.data.TubeGuardLinkRepository
 import dev.tvlimiter.data.TubeGuardTransport
+import dev.tvlimiter.domain.Allowances
+import dev.tvlimiter.domain.BlockCache
+import dev.tvlimiter.domain.Fetch
 import dev.tvlimiter.domain.Moment
+import dev.tvlimiter.domain.OutcomeWire
+import dev.tvlimiter.domain.ParentMode
 import dev.tvlimiter.domain.PairResult
 import dev.tvlimiter.domain.TubeGuardWire
 import dev.tvlimiter.domain.UploadOutcome
+import dev.tvlimiter.domain.VideoBlocker
+import dev.tvlimiter.domain.VideoKey
 import dev.tvlimiter.domain.Watch
+import dev.tvlimiter.ui.ApproveResult
+import dev.tvlimiter.ui.AskResult
 import dev.tvlimiter.ui.PermissionStatus
 import java.io.IOException
 import java.util.TimeZone
+import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Everything that talks to TubeGuard. With no backend address in the build ([enabled] is false) every
@@ -77,6 +89,9 @@ object TubeGuard {
             token = { link.current().deviceToken },
             now = ::now,
             bootCount = { bootCount(context) },
+            onSent = { report, watchEventId, outcome ->
+                blocker(context).onReported(VideoKey.of(report), watchEventId, outcome, SystemClock.elapsedRealtime())
+            },
         ).also { uploader = it }
         try {
             when (val result = sender.flush()) {
@@ -95,6 +110,89 @@ object TubeGuard {
             Log.w(TAG, "Sending reports failed: ${e.javaClass.simpleName}")
             scheduleRetry(context, RETRY_AFTER_ERROR_MS)
             false
+        }
+    }
+
+    // Blocking ---------------------------------------------------------------------------------------------
+
+    private val blockerLock = Any()
+    @Volatile private var blockerInstance: VideoBlocker? = null
+    private val polling = AtomicBoolean(false)
+
+    /** Runs the block screen's own calls (asking a parent, polling), so they never queue behind a slow upload. */
+    val screenWorker: ExecutorService = Executors.newSingleThreadExecutor()
+
+    /** The one blocker, shared by the media listener (which feeds it what plays) and the block screen. */
+    fun blocker(context: Context): VideoBlocker = blockerInstance ?: synchronized(blockerLock) {
+        val app = context.applicationContext
+        blockerInstance ?: VideoBlocker(
+            cache = BlockCache(BlockCacheRepository.get(app), System::currentTimeMillis),
+            allowances = Allowances.shared,
+            parentMode = { ParentMode.shared.active },
+            source = { id -> fetchOutcome(app, id) },
+            actions = AndroidBlockActions(app),
+        ).also { blockerInstance = it }
+    }
+
+    /** Asks about watches whose outcome is not decided yet. Called every few seconds by the media listener. */
+    fun pollBlocks(context: Context) {
+        if (!isConnected(context)) return
+        val blocker = blocker(context)
+        if (blocker.pendingCount() == 0 || !polling.compareAndSet(false, true)) return
+        worker.execute {
+            try {
+                blocker.poll(SystemClock.elapsedRealtime())
+            } catch (e: Exception) {
+                Log.w(TAG, "Checking a video's outcome failed: ${e.javaClass.simpleName}")
+            } finally {
+                polling.set(false)
+            }
+        }
+    }
+
+    /** What TubeGuard says about one of this TV's watches. Slow: call it off the main thread. Never throws. */
+    fun fetchOutcome(context: Context, watchEventId: String): Fetch {
+        val token = TubeGuardLinkRepository.get(context).current().deviceToken ?: return Fetch.Unreachable
+        return try {
+            val reply = transport.get(TubeGuardWire.watchPath(watchEventId), token)
+            when {
+                reply.status == 404 -> Fetch.Gone
+                reply.status in 200..299 -> OutcomeWire.parse(reply.body)?.let { Fetch.Got(it) } ?: Fetch.Unreachable
+                else -> Fetch.Unreachable
+            }
+        } catch (e: IOException) {
+            Fetch.Unreachable
+        }
+    }
+
+    /** Tells the family's parents this TV wants to watch a blocked video. Slow: call it off the main thread. */
+    fun requestApproval(context: Context, watchEventId: String): AskResult {
+        val token = TubeGuardLinkRepository.get(context).current().deviceToken ?: return AskResult.Unreachable
+        return try {
+            val reply = transport.post(TubeGuardWire.requestApprovalPath(watchEventId), token, "{}")
+            when {
+                reply.status in 200..299 -> AskResult.Sent
+                reply.status == 429 -> AskResult.TooMany
+                reply.status == 404 || reply.status == 409 -> AskResult.Refused
+                else -> AskResult.Unreachable
+            }
+        } catch (e: IOException) {
+            AskResult.Unreachable
+        }
+    }
+
+    /** Records the parent's passkey approval of a video with TubeGuard. Slow: call it off the main thread. */
+    fun approveVideo(context: Context, watchEventId: String): ApproveResult {
+        val token = TubeGuardLinkRepository.get(context).current().deviceToken ?: return ApproveResult.Unreachable
+        return try {
+            val reply = transport.post(TubeGuardWire.approvePath(watchEventId), token, "{}")
+            when {
+                reply.status in 200..299 -> ApproveResult.Recorded
+                reply.status == 409 -> ApproveResult.Banned
+                else -> ApproveResult.Unreachable
+            }
+        } catch (e: IOException) {
+            ApproveResult.Unreachable
         }
     }
 
@@ -158,6 +256,7 @@ object TubeGuard {
         }
         TubeGuardLinkRepository.get(app).forget()
         ReportQueueRepository.get(app).clear()
+        BlockCacheRepository.get(app).save(emptyList())
         cancelJobs(app)
         TrackingService.refreshNotice(app)
     }
@@ -166,6 +265,7 @@ object TubeGuard {
     private fun removedByParent(context: Context) {
         TubeGuardLinkRepository.get(context).markDisconnected()
         ReportQueueRepository.get(context).clear()
+        BlockCacheRepository.get(context).save(emptyList())
         cancelJobs(context)
         TrackingService.refreshNotice(context)
     }

@@ -41,6 +41,7 @@ open class WatchListener : NotificationListenerService() {
     override fun onListenerConnected() {
         super.onListenerConnected()
         connected = true
+        running = this
         TrackingService.refreshNotice(this)
         if (!TubeGuard.enabled) return
         try {
@@ -56,6 +57,7 @@ open class WatchListener : NotificationListenerService() {
 
     override fun onListenerDisconnected() {
         connected = false
+        if (running === this) running = null
         main.removeCallbacks(tick)
         try {
             getSystemService(MediaSessionManager::class.java).removeOnActiveSessionsChangedListener(sessionsChanged)
@@ -91,6 +93,19 @@ open class WatchListener : NotificationListenerService() {
         val suppressed = ParentMode.shared.active || !TubeGuard.isConnected(this)
         val playing = callbacks.keys.firstNotNullOfOrNull { playing(it) }
         tracker.update(TubeGuard.now(), playing, suppressed).forEach { TubeGuard.submit(this, it) }
+        // A video already found over a limit is blocked as soon as it plays. Parent mode and an unpaired TV block nothing.
+        if (!suppressed) TubeGuard.blocker(this).onPlaying(playing)
+        TubeGuard.pollBlocks(this)
+    }
+
+    /** Pauses YouTube. Its TV app takes pause and play from other apps but not stop, and "next" would start an unchecked video. */
+    fun pauseYouTube() {
+        main.post { callbacks.keys.forEach { runCatching { it.transportControls.pause() } } }
+    }
+
+    /** Lets a video a parent allowed play again. */
+    fun playYouTube() {
+        main.post { callbacks.keys.forEach { runCatching { it.transportControls.play() } } }
     }
 
     private fun playing(controller: MediaController): Playing? {
@@ -101,7 +116,11 @@ open class WatchListener : NotificationListenerService() {
         return Playing(title, channel, metadata.getLong(MediaMetadata.METADATA_KEY_DURATION))
     }
 
-    private companion object {
-        const val SAMPLE_EVERY_MS = 3_000L
+    companion object {
+        private const val SAMPLE_EVERY_MS = 3_000L
+
+        /** The connected listener, for the block screen to pause and resume YouTube through. */
+        @Volatile var running: WatchListener? = null
+            private set
     }
 }

@@ -26,6 +26,7 @@ import dev.tvlimiter.data.ProfilesRepository
 import dev.tvlimiter.data.UsageRepository
 import dev.tvlimiter.domain.Gate
 import dev.tvlimiter.domain.LimitEvaluator
+import dev.tvlimiter.domain.Allowances
 import dev.tvlimiter.domain.ParentMode
 import dev.tvlimiter.domain.Viewer
 import dev.tvlimiter.domain.ViewerGate
@@ -52,6 +53,7 @@ class TrackingService : Service() {
                 Intent.ACTION_SCREEN_OFF, Intent.ACTION_DREAMING_STARTED -> {
                     ParentMode.shared.end()
                     Viewer.shared.end()
+                    Allowances.shared.clear()
                 }
                 // Waking up, or the screensaver ending, asks who is watching.
                 Intent.ACTION_SCREEN_ON, Intent.ACTION_DREAMING_STOPPED -> {
@@ -119,6 +121,7 @@ class TrackingService : Service() {
         if (getSystemService(PowerManager::class.java)?.isInteractive == false) {
             ParentMode.shared.end()
             Viewer.shared.end()
+            Allowances.shared.clear()
         }
         val gate = gate()
         val counted = pkg != null && !exempt.isExempt(pkg)
