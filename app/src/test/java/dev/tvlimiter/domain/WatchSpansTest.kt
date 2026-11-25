@@ -142,4 +142,27 @@ class WatchSpansTest {
         assertNotNull(correction)
         assertNotNull(correction!!.spans)
     }
+
+    @Test
+    fun `the first report and each update carry where the player is now, also after a seek back`() {
+        play(0, 30, startPos = 1000.0)
+        assertEquals(1006, reports[0].positionSec)
+        // Seek back to the start of the video and play a little.
+        play(33, 45, startPos = 20.0)
+        tracker.finish(Moment(50_000, 1_000_050_000))
+        updates += tracker.takeSpanUpdates()
+        // The highest span is near 1030, but the player is at 32.
+        assertEquals(32, updates.last().positionSec)
+        assertEquals(listOf(20 to 32, 1000 to 1030), spansOf(updates.last()))
+    }
+
+    @Test
+    fun `a watch with no position has none to send, and a Short sends none`() {
+        var t = 0
+        while (t <= 9) {
+            at(t, item(null))
+            t += 3
+        }
+        assertNull(reports[0].positionSec)
+    }
 }

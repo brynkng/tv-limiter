@@ -33,6 +33,17 @@ class TubeGuardWireTest {
     }
 
     @Test
+    fun `a report and a spans update carry the current position in whole seconds, and leave it out when there is none`() {
+        val body = obj(TubeGuardWire.reportBody(report.copy(spans = listOf(Span(0, 6)), position = 6), Moment(70_000, 5_060_000), currentBootCount = 7))
+        assertEquals(6, body["position"]!!.jsonPrimitive.int)
+        assertFalse(obj(TubeGuardWire.reportBody(report.copy(spans = listOf(Span(0, 6))), Moment(70_000, 5_060_000), currentBootCount = 7)).containsKey("position"))
+        // A Short reports no spans and so no position.
+        assertFalse(obj(TubeGuardWire.reportBody(report.copy(position = 6), Moment(70_000, 5_060_000), currentBootCount = 7)).containsKey("position"))
+        assertEquals("""{"spans":[[0,70]],"position":70}""", TubeGuardWire.spansBody(listOf(Span(0, 70)), 70))
+        assertEquals("""{"spans":[[0,70]]}""", TubeGuardWire.spansBody(listOf(Span(0, 70))))
+    }
+
+    @Test
     fun `a spans update carries every span, goes to the watch's own path, and is keyed like its report`() {
         assertEquals("""{"spans":[[0,70],[900,940]]}""", TubeGuardWire.spansBody(listOf(Span(0, 70), Span(900, 940))))
         assertEquals("/api/device/watches/abc%2F1/spans", TubeGuardWire.spansPath("abc/1"))
@@ -43,6 +54,7 @@ class TubeGuardWireTest {
     fun `a queued watch keeps its spans`() {
         val watch = Watch("A title", "A channel", 213, Moment(10_000, 5_000_000), spans = listOf(Span(5, 12)))
         assertEquals(listOf(Span(5, 12)), TubeGuardWire.queued(watch, bootCount = 7).spans)
+        assertEquals(12, TubeGuardWire.queued(watch.copy(positionSec = 12), bootCount = 7).position)
     }
 
     @Test

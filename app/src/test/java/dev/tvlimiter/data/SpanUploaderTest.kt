@@ -56,6 +56,17 @@ class SpanUploaderTest {
     }
 
     @Test
+    fun `the position goes with the spans when there is one`() {
+        val queue = queue()
+        sentReport(queue)
+        val transport = FakeTransport()
+        val uploader = SpanUploader(queue, transport, token = { "tok" })
+        uploader.add(key, listOf(Span(0, 70)), position = 12)
+        uploader.flush()
+        assertEquals("""{"spans":[[0,70]],"position":12}""", transport.sent.single().third)
+    }
+
+    @Test
     fun `only the newest list for a watch is kept, since each carries every span`() {
         val queue = queue()
         sentReport(queue)
