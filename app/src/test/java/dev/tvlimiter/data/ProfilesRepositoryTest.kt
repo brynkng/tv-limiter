@@ -2,7 +2,7 @@ package dev.tvlimiter.data
 
 import dev.tvlimiter.domain.AgeBand
 import dev.tvlimiter.domain.Limit
-import dev.tvlimiter.domain.Mode
+import dev.tvlimiter.domain.Profiles
 import dev.tvlimiter.domain.Profile
 import dev.tvlimiter.domain.ProfilesFile
 import org.junit.Assert.assertEquals
@@ -16,23 +16,21 @@ class ProfilesRepositoryTest {
     private fun store() = JsonFileStore(java.io.File(folder.root, "profiles.json"), ProfilesFile.serializer()) { ProfilesFile() }
 
     @Test
-    fun `profiles and the mode are saved and read back`() {
+    fun `profiles are saved and read back after the default one`() {
         val repo = ProfilesRepository(store())
         repo.upsert(Profile("a1", "Sam", AgeBand.YOUNG))
-        repo.setMode(Mode.PROFILES)
 
         val reread = ProfilesRepository(store())
-        assertEquals(Mode.PROFILES, reread.mode())
-        assertEquals(listOf("Sam"), reread.profiles().map { it.name })
+        assertEquals(listOf("Kids", "Sam"), reread.profiles().map { it.name })
     }
 
     @Test
-    fun `removing the last profile turns profiles mode off`() {
+    fun `the default profile stays when others are removed`() {
         val repo = ProfilesRepository(store())
         repo.upsert(Profile("a1", "Sam", AgeBand.YOUNG))
-        repo.setMode(Mode.PROFILES)
         repo.remove("a1")
-        assertEquals(Mode.SHARED, ProfilesRepository(store()).mode())
+        repo.remove(Profiles.DEFAULT_ID)
+        assertEquals(listOf(Profiles.DEFAULT_ID), ProfilesRepository(store()).profiles().map { it.id })
     }
 
     @Test

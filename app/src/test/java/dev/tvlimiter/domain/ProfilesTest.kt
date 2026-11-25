@@ -5,7 +5,6 @@ import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -36,10 +35,10 @@ class ProfilesTest {
     }
 
     @Test
-    fun `the shared profile keeps today's file paths`() {
+    fun `the default profile keeps today's file paths`() {
         val dir = File("/data/files")
         for (name in listOf("limits.json", "usage.json", "history.json", "pin.json")) {
-            assertEquals(File(dir, name), Profiles.dataFile(dir, Profiles.SHARED_ID, name))
+            assertEquals(File(dir, name), Profiles.dataFile(dir, Profiles.DEFAULT_ID, name))
         }
     }
 
@@ -52,8 +51,8 @@ class ProfilesTest {
     }
 
     @Test(expected = IllegalArgumentException::class)
-    fun `the shared profile has no folder to delete`() {
-        Profiles.folder(File("/data/files"), Profiles.SHARED_ID)
+    fun `the default profile has no folder to delete`() {
+        Profiles.folder(File("/data/files"), Profiles.DEFAULT_ID)
     }
 
     @Test
@@ -65,18 +64,27 @@ class ProfilesTest {
     }
 
     @Test
-    fun `a new id skips the shared id and ids in use`() {
-        val tries = ArrayDeque(listOf(Profiles.SHARED_ID, "a1", "../x", "c3"))
+    fun `a new id skips the default id and ids in use`() {
+        val tries = ArrayDeque(listOf(Profiles.DEFAULT_ID, "a1", "../x", "c3"))
         assertEquals("c3", Profiles.newId(setOf("a1")) { tries.removeFirst() })
-        assertNotEquals(Profiles.SHARED_ID, Profiles.newId(emptySet()))
+        assertNotEquals(Profiles.DEFAULT_ID, Profiles.newId(emptySet()))
     }
 
     @Test
-    fun `profiles mode needs a child, and every older child needs a passkey`() {
-        assertEquals("Add a profile first.", Profiles.switchProblem(emptyList()) { false })
-        assertNull(Profiles.switchProblem(listOf(young)) { false })
-        assertEquals("Set a passkey for Ava first.", Profiles.switchProblem(listOf(young, teen)) { false })
-        assertNull(Profiles.switchProblem(listOf(young, teen)) { it == "b2" })
+    fun `only a single profile with no passkey to enter skips the picker`() {
+        val kids = Profiles.defaultProfile()
+        assertFalse(Profiles.needsPicker(listOf(kids)) { false })
+        assertTrue(Profiles.needsPicker(listOf(kids)) { true })
+        assertTrue(Profiles.needsPicker(listOf(teen)) { true })
+        assertTrue(Profiles.needsPicker(listOf(kids, young)) { false })
+    }
+
+    @Test
+    fun `the default profile's passkey is kept apart from the parent's`() {
+        val dir = File("/data/files")
+        assertEquals(File(dir, "profile-pin.json"), Profiles.passkeyFile(dir, Profiles.DEFAULT_ID))
+        assertNotEquals(File(dir, "pin.json"), Profiles.passkeyFile(dir, Profiles.DEFAULT_ID))
+        assertEquals(File("/data/files/profiles/b2/pin.json"), Profiles.passkeyFile(dir, "b2"))
     }
 
     @Test
@@ -87,15 +95,28 @@ class ProfilesTest {
     }
 
     @Test
-    fun `removing the last profile goes back to shared mode`() {
-        val file = ProfilesFile(Mode.PROFILES, listOf(young, teen))
-        assertEquals(Mode.PROFILES, file.without("a1").mode)
-        assertEquals(Mode.SHARED, file.without("a1").without("b2").mode)
+    fun `possessive names drop the extra s after a final s`() {
+        assertEquals("Ava's", teen.possessive)
+        assertEquals("Kids'", Profiles.defaultProfile().possessive)
     }
 
     @Test
-    fun `a TV without a profiles file is in shared mode`() {
+    fun `the default profile is never removed`() {
+        val file = ProfilesFile().withDefault().withProfile(teen)
+        assertEquals(listOf(Profiles.DEFAULT_ID), file.without("b2").without(Profiles.DEFAULT_ID).profiles.map { it.id })
+    }
+
+    @Test
+    fun `a TV without a profiles file has just the default profile, Kids, young`() {
         val store = JsonFileStore(File.createTempFile("profiles", ".json").also { it.delete() }, ProfilesFile.serializer()) { ProfilesFile() }
-        assertEquals(ProfilesFile(Mode.SHARED, emptyList()), store.read())
+        assertEquals(listOf(Profile(Profiles.DEFAULT_ID, "Kids", AgeBand.YOUNG)), store.read().withDefault().profiles)
+    }
+
+    @Test
+    fun `a file saved while modes existed still reads, with the default added first`() {
+        val file = File.createTempFile("profiles", ".json")
+        file.writeText("""{"mode":"PROFILES","profiles":[{"id":"b2","name":"Ava","band":"TEEN"}]}""")
+        val store = JsonFileStore(file, ProfilesFile.serializer()) { ProfilesFile() }
+        assertEquals(listOf(Profiles.DEFAULT_ID, "b2"), store.read().withDefault().profiles.map { it.id })
     }
 }

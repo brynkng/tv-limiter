@@ -5,36 +5,42 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class ViewerGateTest {
-    private val ids = listOf("a1", "b2")
+    private val kids = Profiles.defaultProfile()
+    private val teen = Profile("b2", "Ava", AgeBand.TEEN)
+    private val noPasskeys: (String) -> Boolean = { false }
 
     @Test
-    fun `shared mode counts for the shared profile, picked or not`() {
-        assertEquals(Gate.CountFor(Profiles.SHARED_ID), ViewerGate.decide(Mode.SHARED, null, parentMode = false, ids))
-        assertEquals(Gate.CountFor(Profiles.SHARED_ID), ViewerGate.decide(Mode.SHARED, "a1", parentMode = false, ids))
+    fun `one profile without a passkey is used without asking`() {
+        assertEquals(Gate.CountFor(kids.id), ViewerGate.decide(null, parentMode = false, listOf(kids), noPasskeys))
     }
 
     @Test
-    fun `parent mode counts nothing in either mode`() {
-        for (mode in Mode.entries) {
-            for (viewer in listOf(null, "a1")) {
-                assertEquals(Gate.CountNothing, ViewerGate.decide(mode, viewer, parentMode = true, ids))
-            }
+    fun `one profile with a passkey asks for it`() {
+        assertEquals(Gate.ShowPicker, ViewerGate.decide(null, parentMode = false, listOf(kids)) { true })
+        assertEquals(Gate.ShowPicker, ViewerGate.decide(null, parentMode = false, listOf(teen)) { true })
+    }
+
+    @Test
+    fun `parent mode counts nothing, picked or not`() {
+        for (viewer in listOf(null, "b2")) {
+            assertEquals(Gate.CountNothing, ViewerGate.decide(viewer, parentMode = true, listOf(kids, teen), noPasskeys))
+            assertEquals(Gate.CountNothing, ViewerGate.decide(viewer, parentMode = true, listOf(kids), noPasskeys))
         }
     }
 
     @Test
-    fun `profiles mode with nobody picked shows the picker`() {
-        assertEquals(Gate.ShowPicker, ViewerGate.decide(Mode.PROFILES, null, parentMode = false, ids))
+    fun `several profiles with nobody picked shows the picker`() {
+        assertEquals(Gate.ShowPicker, ViewerGate.decide(null, parentMode = false, listOf(kids, teen), noPasskeys))
     }
 
     @Test
-    fun `profiles mode counts for whoever picked`() {
-        assertEquals(Gate.CountFor("b2"), ViewerGate.decide(Mode.PROFILES, "b2", parentMode = false, ids))
+    fun `counts for whoever picked`() {
+        assertEquals(Gate.CountFor("b2"), ViewerGate.decide("b2", parentMode = false, listOf(kids, teen), noPasskeys))
     }
 
     @Test
     fun `a viewer whose profile was deleted has to pick again`() {
-        assertEquals(Gate.ShowPicker, ViewerGate.decide(Mode.PROFILES, "gone", parentMode = false, ids))
+        assertEquals(Gate.ShowPicker, ViewerGate.decide("gone", parentMode = false, listOf(kids, teen), noPasskeys))
     }
 
     @Test
