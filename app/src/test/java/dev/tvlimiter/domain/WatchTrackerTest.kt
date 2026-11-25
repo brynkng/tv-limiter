@@ -26,6 +26,22 @@ class WatchTrackerTest {
     }
 
     @Test
+    fun `a watch keeps the profile that was active when it started`() {
+        var t = 0
+        while (t <= 9) {
+            reports += tracker.update(Moment(t * 1000L, 1_000_000_000L), video(seconds = 600), profileId = if (t == 0) "kid1" else "kid2")
+            t += 3
+        }
+        assertEquals(listOf("kid1"), reports.map { it.profileId })
+    }
+
+    @Test
+    fun `a watch with no profile active reports none`() {
+        play(0, 9, video())
+        assertEquals(listOf<String?>(null), reports.map { it.profileId })
+    }
+
+    @Test
     fun `a video played for under 5 seconds is not reported`() {
         play(0, 4, video())
         at(4, null)

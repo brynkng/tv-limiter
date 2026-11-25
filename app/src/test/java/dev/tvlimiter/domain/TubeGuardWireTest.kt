@@ -26,6 +26,31 @@ class TubeGuardWireTest {
     }
 
     @Test
+    fun `a report carries the linked child's id, and none when the profile has no link`() {
+        val linked = obj(TubeGuardWire.reportBody(report.copy(childId = "c1"), Moment(70_000, 5_060_000), currentBootCount = 7))
+        assertEquals("c1", linked["childId"]!!.jsonPrimitive.content)
+        val unlinked = obj(TubeGuardWire.reportBody(report, Moment(70_000, 5_060_000), currentBootCount = 7))
+        assertFalse(unlinked.containsKey("childId"))
+    }
+
+    @Test
+    fun `a queued watch keeps the child it was linked to`() {
+        val watch = Watch("A title", "A channel", 60, Moment(1, 2), profileId = "p1")
+        assertEquals("c9", TubeGuardWire.queued(watch, 3, "c9").childId)
+        assertEquals(null, TubeGuardWire.queued(watch, 3).childId)
+    }
+
+    @Test
+    fun `a check-in reply lists the children, and one that doesn't leaves them alone`() {
+        assertEquals(
+            listOf(TubeGuardChild("c1", "Ana"), TubeGuardChild("c2", "Ben")),
+            TubeGuardWire.children("""{"serverTime":1,"children":[{"id":"c1","name":"Ana"},{"id":"c2","name":"Ben"}]}"""),
+        )
+        assertEquals(null, TubeGuardWire.children("""{"serverTime":1}"""))
+        assertEquals(null, TubeGuardWire.children("not json"))
+    }
+
+    @Test
     fun `within one boot the age comes from the elapsed clock and ignores the wall clock`() {
         // The wall clock was set back a year; the elapsed clock still says one minute.
         val body = obj(TubeGuardWire.reportBody(report, Moment(70_000, 5_000_000 - 31_536_000_000), currentBootCount = 7))
@@ -116,7 +141,7 @@ class TubeGuardWireTest {
             201,
             """{"deviceId":"d1","deviceToken":"secret","children":[{"id":"c1","name":"Ana"},{"id":"c2","name":"Ben"}]}""",
         )
-        assertEquals(PairResult.Paired("d1", "secret", listOf("Ana", "Ben")), result)
+        assertEquals(PairResult.Paired("d1", "secret", listOf(TubeGuardChild("c1", "Ana"), TubeGuardChild("c2", "Ben"))), result)
         assertFalse("the token must not show in logs", result.toString().contains("secret"))
     }
 

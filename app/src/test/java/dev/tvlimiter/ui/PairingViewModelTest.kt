@@ -1,6 +1,7 @@
 package dev.tvlimiter.ui
 
 import dev.tvlimiter.domain.PairResult
+import dev.tvlimiter.domain.TubeGuardChild
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -36,7 +37,7 @@ class PairingViewModelTest {
     fun `a paired code names the children`() {
         type("12345678")
         model.beginCheck()
-        model.finishCheck(PairResult.Paired("d", "t", listOf("Ana", "Ben")))
+        model.finishCheck(PairResult.Paired("d", "t", listOf(TubeGuardChild("c1", "Ana"), TubeGuardChild("c2", "Ben"))))
         assertEquals(PairingViewModel.Status.Connected(listOf("Ana", "Ben")), model.status)
         assertEquals("Ana and Ben", PairingViewModel.names(listOf("Ana", "Ben")))
         assertEquals("Ana, Ben and Cy", PairingViewModel.names(listOf("Ana", "Ben", "Cy")))

@@ -3,6 +3,7 @@ package dev.tvlimiter.data
 import dev.tvlimiter.domain.LinkStatus
 import dev.tvlimiter.domain.Moment
 import dev.tvlimiter.domain.QueuedReport
+import dev.tvlimiter.domain.TubeGuardChild
 import dev.tvlimiter.domain.TubeGuardLink
 import dev.tvlimiter.domain.WatchOutcome
 import java.io.File
@@ -280,7 +281,7 @@ class ReportUploaderTest {
     @Test
     fun `the link keeps the token, and a disconnect drops it`() {
         val repo = { TubeGuardLinkRepository(JsonFileStore(File(folder.root, "tubeguard.json"), TubeGuardLink.serializer()) { TubeGuardLink() }) }
-        repo().connect("d1", "tok", listOf("Ana"))
+        repo().connect("d1", "tok", listOf(TubeGuardChild("c1", "Ana")))
         assertTrue(repo().current().isConnected)
         assertEquals("tok", repo().current().deviceToken)
 
@@ -292,6 +293,27 @@ class ReportUploaderTest {
 
         repo().forget()
         assertEquals(LinkStatus.NOT_CONNECTED, repo().current().status)
+    }
+
+    @Test
+    fun `the children a reply lists are kept with their ids, and ignored once disconnected`() {
+        val repo = { TubeGuardLinkRepository(JsonFileStore(File(folder.root, "tubeguard.json"), TubeGuardLink.serializer()) { TubeGuardLink() }) }
+        repo().connect("d1", "tok", listOf(TubeGuardChild("c1", "Ana")))
+        repo().updateChildren(listOf(TubeGuardChild("c1", "Ana"), TubeGuardChild("c2", "Ben")))
+        assertEquals(listOf(TubeGuardChild("c1", "Ana"), TubeGuardChild("c2", "Ben")), repo().current().childList)
+        assertEquals(listOf("Ana", "Ben"), repo().current().children)
+
+        repo().markDisconnected()
+        repo().updateChildren(emptyList())
+        assertEquals(2, repo().current().childList.size)
+    }
+
+    @Test
+    fun `a link file from before children had ids still reads as connected`() {
+        File(folder.root, "tubeguard.json").writeText("""{"status":"CONNECTED","deviceId":"d1","deviceToken":"tok","children":["Ana"]}""")
+        val link = TubeGuardLinkRepository(JsonFileStore(File(folder.root, "tubeguard.json"), TubeGuardLink.serializer()) { TubeGuardLink() }).current()
+        assertTrue(link.isConnected)
+        assertEquals(emptyList<TubeGuardChild>(), link.childList)
     }
 
     @Test
