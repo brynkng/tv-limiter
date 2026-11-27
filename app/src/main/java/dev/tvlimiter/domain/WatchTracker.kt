@@ -70,8 +70,10 @@ data class Watch(
  * - What part of a video was played is kept as spans of seconds, from the player's position at each update.
  *   Only play while the item's length is the video's own length counts, so an ad's positions never do, and
  *   spans played under a shorter length are dropped once the real length shows. A pause, a jump back or a jump
- *   forward starts a new span. A watch's spans go out with its first report, then in a [SpanUpdate] about every
- *   [Rules.spanEveryMs] of play, when the watch has played [Rules.minuteSec] in all, and when it ends.
+ *   forward starts a new span. A watch's spans go out with its first report, then in a [SpanUpdate] as soon as the
+ *   watch has played [Rules.checkSec] in all (once), about every [Rules.spanEveryMs] of play, when it has played
+ *   [Rules.minuteSec] in all, and when it ends. TubeGuard does nothing that costs money for a video until it has
+ *   played [Rules.checkSec], so a video clicked by mistake is never checked.
  */
 class WatchTracker(private val rules: Rules = Rules()) {
     data class Rules(
@@ -87,7 +89,9 @@ class WatchTracker(private val rules: Rules = Rules()) {
         val maxCreditMs: Long = 15_000,
         /** How often the spans of a watch in progress are sent again. */
         val spanEveryMs: Long = 30_000,
-        /** Played seconds at which the backend starts rating a video, so the spans are sent as soon as it is reached. */
+        /** Played seconds at which the backend starts checking a video, so the spans are sent as soon as it is reached. */
+        val checkSec: Int = 10,
+        /** Played seconds at which the backend rates the rest of what was played, so the spans are sent as soon as it is reached. */
         val minuteSec: Int = 60,
     )
 
@@ -126,6 +130,7 @@ class WatchTracker(private val rules: Rules = Rules()) {
         var sentSpans: List<Span>? = null
         var sentAtMs = 0L
         var sentMinute = false
+        var sentCheck = false
     }
 
     private val open = LinkedHashMap<String, Open>()
@@ -231,14 +236,15 @@ class WatchTracker(private val rules: Rules = Rules()) {
 
     private fun playedSeconds(spans: List<Span>) = spans.sumOf { it.endSec - it.startSec }
 
-    /** Sends what was played of each reported watch once it is due: every [Rules.spanEveryMs], and at [Rules.minuteSec] played. */
+    /** Sends what was played of each reported watch once it is due: at [Rules.checkSec] played, every [Rules.spanEveryMs], and at [Rules.minuteSec] played. */
     private fun queueSpanUpdates(nowMs: Long) {
         for (w in open.values) {
             if (!w.reported || !w.positionSeen) continue
             val spans = spansOf(w)
             if (spans == w.sentSpans) continue
             val minuteReached = !w.sentMinute && playedSeconds(spans) >= rules.minuteSec
-            if (minuteReached || nowMs - w.sentAtMs >= rules.spanEveryMs) markSent(w, spans, nowMs)
+            val checkReached = !w.sentCheck && playedSeconds(spans) >= rules.checkSec
+            if (minuteReached || checkReached || nowMs - w.sentAtMs >= rules.spanEveryMs) markSent(w, spans, nowMs)
         }
     }
 
@@ -246,6 +252,7 @@ class WatchTracker(private val rules: Rules = Rules()) {
         w.sentSpans = spans
         w.sentAtMs = nowMs
         if (playedSeconds(spans) >= rules.minuteSec) w.sentMinute = true
+        if (playedSeconds(spans) >= rules.checkSec) w.sentCheck = true
         pendingSpans += SpanUpdate(w.start, spans, positionOf(w))
     }
 
@@ -285,6 +292,7 @@ class WatchTracker(private val rules: Rules = Rules()) {
                         w.sentSpans = it
                         w.sentAtMs = nowMs
                         if (playedSeconds(it) >= rules.minuteSec) w.sentMinute = true
+                        if (playedSeconds(it) >= rules.checkSec) w.sentCheck = true
                     }
                     out += Watch(w.title, w.channel, seconds(w.longestMs), w.start, profileId = w.profileId, short = w.art, spans = spans, positionSec = if (spans != null) positionOf(w) else null)
                 }
