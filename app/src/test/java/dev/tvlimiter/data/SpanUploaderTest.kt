@@ -125,4 +125,27 @@ class SpanUploaderTest {
         assertEquals(listOf(Span(0, 18)), queue.all().single().spans)
         assertEquals(3000, queue.all().single().durationSec)
     }
+
+    @Test
+    fun `the update at 10 seconds of play goes out on the wire once, with the watch's spans`() {
+        val tracker = dev.tvlimiter.domain.WatchTracker()
+        val queue = queue()
+        val transport = FakeTransport()
+        val uploader = SpanUploader(queue, transport, token = { "tok" })
+        // A 50 minute video played from its start, the player read every 3 seconds, for 20 seconds.
+        var t = 0
+        while (t <= 20) {
+            val playing = dev.tvlimiter.domain.Playing("A title", "Channel", 3_000_000, positionMs = t * 1000L)
+            val reports = tracker.update(dev.tvlimiter.domain.Moment(10_000L + t * 1000L, t * 1000L), playing)
+            // The report goes out first and gets its id, as it does on the TV.
+            reports.forEach { queue.add(report); queue.markSent(report, "w1") }
+            tracker.takeSpanUpdates().forEach { uploader.add(key, it.spans, it.positionSec); uploader.flush() }
+            t += 3
+        }
+        assertEquals(
+            listOf("""{"spans":[[0,12]],"position":12}"""),
+            transport.sent.map { it.third },
+        )
+        assertEquals("/api/device/watches/w1/spans", transport.sent.single().first)
+    }
 }

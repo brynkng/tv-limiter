@@ -51,9 +51,30 @@ class WatchSpansTest {
     }
 
     @Test
-    fun `the spans go out about every 30 seconds of play, and as soon as a minute has been played`() {
+    fun `the spans go out as soon as 10 seconds have been played, about every 30 seconds of play, and as soon as a minute has been played`() {
         play(0, 90, startPos = 0.0)
-        assertEquals(listOf(listOf(0 to 36), listOf(0 to 60), listOf(0 to 90)), updates.map { spansOf(it) })
+        assertEquals(listOf(listOf(0 to 12), listOf(0 to 42), listOf(0 to 60), listOf(0 to 90)), updates.map { spansOf(it) })
+    }
+
+    @Test
+    fun `the update at 10 seconds goes out once, and only after the report, which carries the first seconds`() {
+        play(0, 9, startPos = 100.0)
+        assertEquals(1, reports.size)
+        assertTrue("under 10 seconds played, nothing but the report", updates.isEmpty())
+        play(12, 42, startPos = 112.0)
+        assertEquals(listOf(100 to 112), spansOf(updates.first()))
+        // The 30 second update follows 30 seconds after, not another one at 10.
+        assertEquals(2, updates.size)
+        assertEquals(listOf(100 to 142), spansOf(updates[1]))
+    }
+
+    @Test
+    fun `a watch that ends under 10 seconds sends no update at 10, only the one when it ends`() {
+        play(0, 9, startPos = 100.0)
+        at(20, null)
+        at(95, null)
+        assertEquals(1, updates.size)
+        assertEquals(listOf(100 to 109), spansOf(updates[0]))
     }
 
     @Test
